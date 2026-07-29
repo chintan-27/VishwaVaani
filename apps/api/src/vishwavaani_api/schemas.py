@@ -1,0 +1,237 @@
+from datetime import datetime
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from vishwavaani_api.models import HintLocale, Readiness, SessionMode, SessionStatus
+
+MissionSlug = Literal[
+    "us-immigration",
+    "hotel-check-in",
+    "restaurant-ordering",
+    "asking-directions",
+    "missing-baggage",
+]
+
+
+class ErrorDetail(BaseModel):
+    code: str
+    message: str
+    retryable: bool
+    request_id: str
+    retry_after_seconds: int | None = None
+
+
+class ErrorEnvelope(BaseModel):
+    error: ErrorDetail
+
+
+class HealthResponse(BaseModel):
+    status: Literal["ok", "degraded"]
+    live_missions_enabled: bool
+    provider_conformance: Literal["passed", "failed", "not_configured", "unknown"]
+    version: str
+
+
+class WaitlistRequest(BaseModel):
+    email: EmailStr
+    first_name: str = Field(min_length=1, max_length=80)
+    goal: Literal["travel", "study", "work", "confidence"]
+    is_adult: bool
+    turnstile_token: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("is_adult")
+    @classmethod
+    def adult_only(cls, value: bool) -> bool:
+        if not value:
+            raise ValueError("The closed beta is available to adults 18 and older.")
+        return value
+
+
+class WaitlistResponse(BaseModel):
+    status: Literal["accepted", "already_registered"]
+
+
+class InviteClaimRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=128)
+    age_confirmed: bool
+
+
+class InviteClaimResponse(BaseModel):
+    status: Literal["redeemed"]
+    onboarding_required: bool = True
+
+
+class ConsentChoice(BaseModel):
+    consent_type: Literal["core_live_processing", "research", "model_improvement"]
+    version: str = Field(min_length=1, max_length=32)
+    granted: bool
+
+
+class ConsentRequest(BaseModel):
+    choices: list[ConsentChoice] = Field(min_length=1, max_length=3)
+
+    @field_validator("choices")
+    @classmethod
+    def core_consent_required(cls, choices: list[ConsentChoice]) -> list[ConsentChoice]:
+        core = next(
+            (choice for choice in choices if choice.consent_type == "core_live_processing"),
+            None,
+        )
+        if core is None or not core.granted:
+            raise ValueError("Core live-processing consent is required for live missions.")
+        return choices
+
+
+class ProfileUpdateRequest(BaseModel):
+    hint_locale: HintLocale
+    level: Literal["new", "growing", "ready"]
+    caption_override: bool = False
+
+
+class BootstrapResponse(BaseModel):
+    user_id: str
+    invite_redeemed: bool
+    age_confirmed: bool
+    core_consent_active: bool
+    onboarding_completed: bool
+    hint_locale: HintLocale
+    level: str
+    live_missions_enabled: bool
+    limits: dict[str, int]
+
+
+class MissionSummary(BaseModel):
+    slug: MissionSlug
+    title: str
+    objective: str
+    duration_minutes: int
+    required_slots: list[str]
+    version: str
+    localizations: list[HintLocale]
+
+
+class SessionCreateRequest(BaseModel):
+    mission_slug: MissionSlug
+    mode: SessionMode
+    hint_locale: HintLocale
+    caption_assisted: bool = False
+
+
+class SessionCreateResponse(BaseModel):
+    session_id: str
+    status: SessionStatus
+    expires_at: datetime
+    frozen_versions: dict[str, str]
+    offer_url: str
+
+
+class RealtimeOfferRequest(BaseModel):
+    sdp: str = Field(min_length=10, max_length=200_000)
+
+
+class RealtimeOfferResponse(BaseModel):
+    answer_sdp: str
+    session_id: str
+    status: SessionStatus
+
+
+class RepairRequest(BaseModel):
+    kind: Literal["repeat", "slower", "meaning", "hint", "mute", "unmute"]
+    sequence: int = Field(ge=1)
+
+
+class RepairResponse(BaseModel):
+    accepted: bool
+    sequence: int
+
+
+class TurnEventRequest(BaseModel):
+    sequence: int = Field(ge=1)
+    actor: Literal["agent", "learner"]
+    transcript: str = Field(max_length=10_000)
+    started_at_ms: int = Field(ge=0)
+    ended_at_ms: int = Field(ge=0)
+    provider_event_id: str | None = Field(default=None, max_length=128)
+    slot_events: list[dict[str, Any]] = Field(default_factory=list)
+
+    @field_validator("ended_at_ms")
+    @classmethod
+    def ends_after_start(cls, value: int, info: Any) -> int:
+        start = info.data.get("started_at_ms")
+        if start is not None and value < start:
+            raise ValueError("ended_at_ms must not precede started_at_ms")
+        return value
+
+
+class CompleteSessionRequest(BaseModel):
+    final_sequence: int = Field(ge=0)
+    reason: Literal["completed", "user_exit", "connection_lost"]
+
+
+class CompleteSessionResponse(BaseModel):
+    session_id: str
+    status: SessionStatus
+    evaluation_status: Literal["pending", "not_scored"]
+
+
+class ScoreDimension(BaseModel):
+    value: float | None = Field(default=None, ge=0, le=1)
+    evidence: list[str]
+    confidence: float = Field(ge=0, le=1)
+    source: Literal["deterministic", "evaluator", "human"]
+
+
+class EvaluationResponse(BaseModel):
+    session_id: str
+    status: Literal["pending", "evaluated", "failed"]
+    readiness: Readiness | None
+    dimensions: dict[str, ScoreDimension]
+    strengths: list[str]
+    main_obstacle: str | None
+    next_action: dict[str, Any] | None
+    caption_assisted: bool
+
+
+class ProgressResponse(BaseModel):
+    independence_delta: float
+    valid_completions: int
+    repair_successes: int
+    readiness_by_mission: dict[MissionSlug, Readiness]
+    recommended_action: dict[str, Any] | None
+
+
+class PrivacyJobResponse(BaseModel):
+    job_id: str
+    status: Literal["pending"]
+    expected_by: datetime
+
+
+class ProviderConformanceResponse(BaseModel):
+    passed: bool
+    checks: dict[str, bool]
+    safe_failures: list[str]
+
+
+class SemanticEvaluation(BaseModel):
+    comprehension: ScoreDimension
+    grammar: ScoreDimension
+    clarity: ScoreDimension
+    strengths: list[str] = Field(min_length=1, max_length=3)
+    main_obstacle: str = Field(min_length=1, max_length=600)
+    next_action: dict[str, Any]
+
+    @field_validator("clarity")
+    @classmethod
+    def clarity_must_abstain_when_uncertain(cls, value: ScoreDimension) -> ScoreDimension:
+        if value.confidence < 0.7:
+            return value.model_copy(update={"value": None})
+        return value
+
+
+class AuthPrincipal(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    subject: str
+    email: str | None = None
+    is_admin: bool = False

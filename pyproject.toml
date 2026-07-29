@@ -1,0 +1,56 @@
+[project]
+name = "vishwavaani-api"
+version = "0.1.0"
+description = "VishwaVaani session, realtime control, evaluation, and privacy API"
+requires-python = ">=3.12"
+dependencies = [
+  "aiosqlite>=0.20",
+  "alembic>=1.16",
+  "asyncpg>=0.30",
+  "celery[redis]>=5.5",
+  "email-validator>=2.2",
+  "fastapi>=0.139",
+  "httpx>=0.28",
+  "opentelemetry-api>=1.36",
+  "opentelemetry-sdk>=1.36",
+  "psycopg[binary]>=3.2",
+  "pydantic-settings>=2.10",
+  "pyjwt[crypto]>=2.10",
+  "redis>=6.4",
+  "sentry-sdk[fastapi]>=2.35",
+  "sqlalchemy[asyncio]>=2.0",
+  "uvicorn[standard]>=0.35",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4",
+  "pytest-asyncio>=1.1",
+  "pytest-cov>=6.2",
+  "respx>=0.22",
+  "ruff>=0.12",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["apps/api/src/vishwavaani_api"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+asyncio_mode = "auto"
+testpaths = ["apps/api/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"apps/api/alembic/versions/*.py" = ["E501", "I001", "UP007", "UP035"]
+"scripts/provider_conformance.py" = ["ASYNC240"]

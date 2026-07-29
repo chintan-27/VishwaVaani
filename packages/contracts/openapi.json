@@ -1,0 +1,2227 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "VishwaVaani API",
+    "description": "Reusable session, realtime control, evaluation, progress, and privacy contracts for VishwaVaani web and future native clients.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Health",
+        "operationId": "health_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/waitlist": {
+      "post": {
+        "tags": [
+          "waitlist"
+        ],
+        "summary": "Join Waitlist",
+        "operationId": "join_waitlist_v1_waitlist_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WaitlistRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitlistResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invites/claim": {
+      "post": {
+        "tags": [
+          "waitlist"
+        ],
+        "summary": "Claim Invite",
+        "operationId": "claim_invite_v1_invites_claim_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteClaimResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/bootstrap": {
+      "get": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Bootstrap",
+        "operationId": "bootstrap_v1_bootstrap_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BootstrapResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profile": {
+      "put": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Update Profile",
+        "operationId": "update_profile_v1_profile_put",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BootstrapResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/consents": {
+      "post": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Record Consents",
+        "operationId": "record_consents_v1_consents_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/missions": {
+      "get": {
+        "tags": [
+          "missions"
+        ],
+        "summary": "List Missions",
+        "operationId": "list_missions_v1_missions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MissionSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Missions V1 Missions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/missions/{slug}": {
+      "get": {
+        "tags": [
+          "missions"
+        ],
+        "summary": "Get Mission",
+        "operationId": "get_mission_v1_missions__slug__get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Create Session",
+        "operationId": "create_session_v1_sessions_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionCreateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{session_id}/realtime/offers": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Exchange Realtime Offer",
+        "operationId": "exchange_realtime_offer_v1_sessions__session_id__realtime_offers_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RealtimeOfferRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealtimeOfferResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{session_id}/turns": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Record Turn",
+        "operationId": "record_turn_v1_sessions__session_id__turns_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TurnEventRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{session_id}/repairs": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Record Repair",
+        "operationId": "record_repair_v1_sessions__session_id__repairs_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepairRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepairResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{session_id}/complete": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Complete Session",
+        "operationId": "complete_session_v1_sessions__session_id__complete_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{session_id}/evaluation": {
+      "get": {
+        "tags": [
+          "evaluation"
+        ],
+        "summary": "Get Evaluation",
+        "operationId": "get_evaluation_v1_sessions__session_id__evaluation_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/progress": {
+      "get": {
+        "tags": [
+          "evaluation"
+        ],
+        "summary": "Get Progress",
+        "operationId": "get_progress_v1_progress_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgressResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/privacy/exports": {
+      "post": {
+        "tags": [
+          "privacy"
+        ],
+        "summary": "Request Export",
+        "operationId": "request_export_v1_privacy_exports_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivacyJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/privacy/deletion": {
+      "post": {
+        "tags": [
+          "privacy"
+        ],
+        "summary": "Request Deletion",
+        "operationId": "request_deletion_v1_privacy_deletion_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivacyJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/invitations": {
+      "post": {
+        "tags": [
+          "beta-admin"
+        ],
+        "summary": "Create Invitation",
+        "operationId": "create_invitation_v1_admin_invitations_post",
+        "parameters": [
+          {
+            "name": "expires_in_days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 14,
+              "title": "Expires In Days"
+            }
+          },
+          {
+            "name": "x-admin-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Key"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Create Invitation V1 Admin Invitations Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/provider/conformance": {
+      "post": {
+        "tags": [
+          "beta-admin"
+        ],
+        "summary": "Provider Conformance",
+        "operationId": "provider_conformance_v1_admin_provider_conformance_post",
+        "parameters": [
+          {
+            "name": "x-admin-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "title": "Events"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderConformanceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BootstrapResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "invite_redeemed": {
+            "type": "boolean",
+            "title": "Invite Redeemed"
+          },
+          "age_confirmed": {
+            "type": "boolean",
+            "title": "Age Confirmed"
+          },
+          "core_consent_active": {
+            "type": "boolean",
+            "title": "Core Consent Active"
+          },
+          "onboarding_completed": {
+            "type": "boolean",
+            "title": "Onboarding Completed"
+          },
+          "hint_locale": {
+            "$ref": "#/components/schemas/HintLocale"
+          },
+          "level": {
+            "type": "string",
+            "title": "Level"
+          },
+          "live_missions_enabled": {
+            "type": "boolean",
+            "title": "Live Missions Enabled"
+          },
+          "limits": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Limits"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "invite_redeemed",
+          "age_confirmed",
+          "core_consent_active",
+          "onboarding_completed",
+          "hint_locale",
+          "level",
+          "live_missions_enabled",
+          "limits"
+        ],
+        "title": "BootstrapResponse"
+      },
+      "CompleteSessionRequest": {
+        "properties": {
+          "final_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Final Sequence"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "user_exit",
+              "connection_lost"
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "final_sequence",
+          "reason"
+        ],
+        "title": "CompleteSessionRequest"
+      },
+      "CompleteSessionResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          },
+          "evaluation_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "not_scored"
+            ],
+            "title": "Evaluation Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "evaluation_status"
+        ],
+        "title": "CompleteSessionResponse"
+      },
+      "ConsentChoice": {
+        "properties": {
+          "consent_type": {
+            "type": "string",
+            "enum": [
+              "core_live_processing",
+              "research",
+              "model_improvement"
+            ],
+            "title": "Consent Type"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Version"
+          },
+          "granted": {
+            "type": "boolean",
+            "title": "Granted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "consent_type",
+          "version",
+          "granted"
+        ],
+        "title": "ConsentChoice"
+      },
+      "ConsentRequest": {
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/ConsentChoice"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Choices"
+          }
+        },
+        "type": "object",
+        "required": [
+          "choices"
+        ],
+        "title": "ConsentRequest"
+      },
+      "EvaluationResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "evaluated",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "readiness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Readiness"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dimensions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ScoreDimension"
+            },
+            "type": "object",
+            "title": "Dimensions"
+          },
+          "strengths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Strengths"
+          },
+          "main_obstacle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Obstacle"
+          },
+          "next_action": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Action"
+          },
+          "caption_assisted": {
+            "type": "boolean",
+            "title": "Caption Assisted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "readiness",
+          "dimensions",
+          "strengths",
+          "main_obstacle",
+          "next_action",
+          "caption_assisted"
+        ],
+        "title": "EvaluationResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ],
+            "title": "Status"
+          },
+          "live_missions_enabled": {
+            "type": "boolean",
+            "title": "Live Missions Enabled"
+          },
+          "provider_conformance": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "not_configured",
+              "unknown"
+            ],
+            "title": "Provider Conformance"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "live_missions_enabled",
+          "provider_conformance",
+          "version"
+        ],
+        "title": "HealthResponse"
+      },
+      "HintLocale": {
+        "type": "string",
+        "enum": [
+          "hi-IN",
+          "ta-IN",
+          "te-IN",
+          "bn-IN",
+          "mr-IN"
+        ],
+        "title": "HintLocale"
+      },
+      "InviteClaimRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 6,
+            "title": "Code"
+          },
+          "age_confirmed": {
+            "type": "boolean",
+            "title": "Age Confirmed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "age_confirmed"
+        ],
+        "title": "InviteClaimRequest"
+      },
+      "InviteClaimResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "redeemed",
+            "title": "Status"
+          },
+          "onboarding_required": {
+            "type": "boolean",
+            "title": "Onboarding Required",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "InviteClaimResponse"
+      },
+      "MissionSummary": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "enum": [
+              "us-immigration",
+              "hotel-check-in",
+              "restaurant-ordering",
+              "asking-directions",
+              "missing-baggage"
+            ],
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "objective": {
+            "type": "string",
+            "title": "Objective"
+          },
+          "duration_minutes": {
+            "type": "integer",
+            "title": "Duration Minutes"
+          },
+          "required_slots": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Slots"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "localizations": {
+            "items": {
+              "$ref": "#/components/schemas/HintLocale"
+            },
+            "type": "array",
+            "title": "Localizations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "title",
+          "objective",
+          "duration_minutes",
+          "required_slots",
+          "version",
+          "localizations"
+        ],
+        "title": "MissionSummary"
+      },
+      "PrivacyJobResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "pending",
+            "title": "Status"
+          },
+          "expected_by": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expected By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "expected_by"
+        ],
+        "title": "PrivacyJobResponse"
+      },
+      "ProfileUpdateRequest": {
+        "properties": {
+          "hint_locale": {
+            "$ref": "#/components/schemas/HintLocale"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "new",
+              "growing",
+              "ready"
+            ],
+            "title": "Level"
+          },
+          "caption_override": {
+            "type": "boolean",
+            "title": "Caption Override",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "hint_locale",
+          "level"
+        ],
+        "title": "ProfileUpdateRequest"
+      },
+      "ProgressResponse": {
+        "properties": {
+          "independence_delta": {
+            "type": "number",
+            "title": "Independence Delta"
+          },
+          "valid_completions": {
+            "type": "integer",
+            "title": "Valid Completions"
+          },
+          "repair_successes": {
+            "type": "integer",
+            "title": "Repair Successes"
+          },
+          "readiness_by_mission": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Readiness"
+            },
+            "propertyNames": {
+              "enum": [
+                "us-immigration",
+                "hotel-check-in",
+                "restaurant-ordering",
+                "asking-directions",
+                "missing-baggage"
+              ]
+            },
+            "type": "object",
+            "title": "Readiness By Mission"
+          },
+          "recommended_action": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "independence_delta",
+          "valid_completions",
+          "repair_successes",
+          "readiness_by_mission",
+          "recommended_action"
+        ],
+        "title": "ProgressResponse"
+      },
+      "ProviderConformanceResponse": {
+        "properties": {
+          "passed": {
+            "type": "boolean",
+            "title": "Passed"
+          },
+          "checks": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Checks"
+          },
+          "safe_failures": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Safe Failures"
+          }
+        },
+        "type": "object",
+        "required": [
+          "passed",
+          "checks",
+          "safe_failures"
+        ],
+        "title": "ProviderConformanceResponse"
+      },
+      "Readiness": {
+        "type": "string",
+        "enum": [
+          "first-attempt",
+          "practicing",
+          "nearly-ready",
+          "ready"
+        ],
+        "title": "Readiness"
+      },
+      "RealtimeOfferRequest": {
+        "properties": {
+          "sdp": {
+            "type": "string",
+            "maxLength": 200000,
+            "minLength": 10,
+            "title": "Sdp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sdp"
+        ],
+        "title": "RealtimeOfferRequest"
+      },
+      "RealtimeOfferResponse": {
+        "properties": {
+          "answer_sdp": {
+            "type": "string",
+            "title": "Answer Sdp"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer_sdp",
+          "session_id",
+          "status"
+        ],
+        "title": "RealtimeOfferResponse"
+      },
+      "RepairRequest": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "repeat",
+              "slower",
+              "meaning",
+              "hint",
+              "mute",
+              "unmute"
+            ],
+            "title": "Kind"
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Sequence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "sequence"
+        ],
+        "title": "RepairRequest"
+      },
+      "RepairResponse": {
+        "properties": {
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accepted",
+          "sequence"
+        ],
+        "title": "RepairResponse"
+      },
+      "ScoreDimension": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "deterministic",
+              "evaluator",
+              "human"
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence",
+          "confidence",
+          "source"
+        ],
+        "title": "ScoreDimension"
+      },
+      "SessionCreateRequest": {
+        "properties": {
+          "mission_slug": {
+            "type": "string",
+            "enum": [
+              "us-immigration",
+              "hotel-check-in",
+              "restaurant-ordering",
+              "asking-directions",
+              "missing-baggage"
+            ],
+            "title": "Mission Slug"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/SessionMode"
+          },
+          "hint_locale": {
+            "$ref": "#/components/schemas/HintLocale"
+          },
+          "caption_assisted": {
+            "type": "boolean",
+            "title": "Caption Assisted",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "mission_slug",
+          "mode",
+          "hint_locale"
+        ],
+        "title": "SessionCreateRequest"
+      },
+      "SessionCreateResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "frozen_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Frozen Versions"
+          },
+          "offer_url": {
+            "type": "string",
+            "title": "Offer Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "expires_at",
+          "frozen_versions",
+          "offer_url"
+        ],
+        "title": "SessionCreateResponse"
+      },
+      "SessionMode": {
+        "type": "string",
+        "enum": [
+          "coach",
+          "real_world"
+        ],
+        "title": "SessionMode"
+      },
+      "SessionStatus": {
+        "type": "string",
+        "enum": [
+          "created",
+          "connecting",
+          "active",
+          "reconnecting",
+          "completed",
+          "abandoned",
+          "failed",
+          "evaluation-pending",
+          "evaluated"
+        ],
+        "title": "SessionStatus"
+      },
+      "TurnEventRequest": {
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Sequence"
+          },
+          "actor": {
+            "type": "string",
+            "enum": [
+              "agent",
+              "learner"
+            ],
+            "title": "Actor"
+          },
+          "transcript": {
+            "type": "string",
+            "maxLength": 10000,
+            "title": "Transcript"
+          },
+          "started_at_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Started At Ms"
+          },
+          "ended_at_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Ended At Ms"
+          },
+          "provider_event_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Event Id"
+          },
+          "slot_events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Slot Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence",
+          "actor",
+          "transcript",
+          "started_at_ms",
+          "ended_at_ms"
+        ],
+        "title": "TurnEventRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WaitlistRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "first_name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "First Name"
+          },
+          "goal": {
+            "type": "string",
+            "enum": [
+              "travel",
+              "study",
+              "work",
+              "confidence"
+            ],
+            "title": "Goal"
+          },
+          "is_adult": {
+            "type": "boolean",
+            "title": "Is Adult"
+          },
+          "turnstile_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turnstile Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "first_name",
+          "goal",
+          "is_adult"
+        ],
+        "title": "WaitlistRequest"
+      },
+      "WaitlistResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "already_registered"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "WaitlistResponse"
+      }
+    }
+  }
+}
