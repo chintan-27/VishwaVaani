@@ -1,7 +1,12 @@
-import { cp, rm } from "node:fs/promises";
+import { cp, mkdir, rm } from "node:fs/promises";
 
-const exportedSite = new URL("../apps/web/out/", import.meta.url);
+const vinextOutput = new URL("../apps/web/dist/", import.meta.url);
 const sitesOutput = new URL("../dist/", import.meta.url);
+const hostingConfig = new URL("../.openai/hosting.json", import.meta.url);
+const packagedHostingDirectory = new URL(".openai/", sitesOutput);
+const packagedHostingConfig = new URL("hosting.json", packagedHostingDirectory);
 
 await rm(sitesOutput, { recursive: true, force: true });
-await cp(exportedSite, sitesOutput, { recursive: true });
+await cp(vinextOutput, sitesOutput, { recursive: true });
+await mkdir(packagedHostingDirectory, { recursive: true });
+await cp(hostingConfig, packagedHostingConfig);

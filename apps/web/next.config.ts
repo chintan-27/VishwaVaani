@@ -3,8 +3,6 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const nextConfig: NextConfig = {
-  output: "export",
-  trailingSlash: true,
   reactStrictMode: true,
   poweredByHeader: false,
   turbopack: {
