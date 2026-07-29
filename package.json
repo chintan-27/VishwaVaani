@@ -1,0 +1,22 @@
+{
+  "name": "vishwavaani",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.18.0",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "pnpm --filter @vishwavaani/web dev",
+    "build": "pnpm --filter @vishwavaani/web build",
+    "lint": "pnpm --filter @vishwavaani/web lint",
+    "typecheck": "pnpm --filter @vishwavaani/web typecheck",
+    "test": "pnpm --filter @vishwavaani/web test",
+    "test:e2e": "pnpm --filter @vishwavaani/web test:e2e",
+    "api:dev": "uv run fastapi dev apps/api/src/vishwavaani_api/main.py",
+    "api:test": "uv run pytest",
+    "api:openapi": "uv run python scripts/export_openapi.py",
+    "api:client": "pnpm api:openapi && pnpm --filter @vishwavaani/web generate:client",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm api:test && pnpm build"
+  }
+}

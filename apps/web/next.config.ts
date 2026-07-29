@@ -1,0 +1,16 @@
+import type { NextConfig } from "next";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const nextConfig: NextConfig = {
+  reactStrictMode: true,
+  poweredByHeader: false,
+  turbopack: {
+    root: resolve(dirname(fileURLToPath(import.meta.url)), "../.."),
+  },
+  experimental: {
+    optimizePackageImports: ["lucide-react", "motion"],
+  },
+};
+
+export default nextConfig;

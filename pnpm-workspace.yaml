@@ -1,0 +1,21 @@
+packages:
+  - apps/web
+
+overrides:
+  brace-expansion: 5.0.8
+  minimatch: 10.2.6
+  postcss: 8.5.25
+  sharp: 0.35.3
+
+onlyBuiltDependencies:
+  - sharp
+allowBuilds:
+  sharp: true
+
+peerDependencyRules:
+  allowedVersions:
+    "@emnapi/core": "1"
+    "@emnapi/runtime": "1"
+
+minimumReleaseAgeExclude:
+  - postcss@8.5.25
