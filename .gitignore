@@ -4,6 +4,8 @@ AGENTS.md
 .env
 .env.local
 .next/
+dist/
+out/
 node_modules/
 coverage/
 playwright-report/

@@ -4,7 +4,11 @@ import { notFound } from "next/navigation";
 
 import { MissionArtwork } from "@/components/mission-artwork";
 import { MissionBriefing } from "@/components/mission-briefing";
-import { getMission } from "@/lib/missions";
+import { getMission, missions } from "@/lib/missions";
+
+export function generateStaticParams() {
+  return missions.map((mission) => ({ slug: mission.slug }));
+}
 
 export default async function MissionBriefingPage({
   params,

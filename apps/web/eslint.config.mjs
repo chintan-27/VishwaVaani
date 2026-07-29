@@ -4,7 +4,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default defineConfig(
-  globalIgnores([".next/**", "coverage/**", "playwright-report/**", "next-env.d.ts"]),
+  globalIgnores([".next/**", "out/**", "coverage/**", "playwright-report/**", "next-env.d.ts"]),
   eslint.configs.recommended,
   tseslint.configs.recommended,
   {
