@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "dev": "pnpm --filter @vishwavaani/web dev",
-    "build": "pnpm --filter @vishwavaani/web build",
+    "build": "npm --workspace @vishwavaani/web run build",
     "lint": "pnpm --filter @vishwavaani/web lint",
     "typecheck": "pnpm --filter @vishwavaani/web typecheck",
     "test": "pnpm --filter @vishwavaani/web test",
