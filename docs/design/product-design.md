@@ -2,41 +2,100 @@
 
 ## Experience Model
 
-VishwaVaani should feel like a mission dashboard, not a digital textbook. The home screen presents one clear next action—start today’s mission—and speaking screens center a large, accessible voice control.
+VishwaVaani is a cinematic, voice-first mission dashboard, not a digital textbook. The primary
+navigation is Home, Missions, Progress, and Settings. Samvaad, Yatra, Uccharan, and Pragati remain
+secondary labels that explain learning responsibilities without asking users to learn an internal
+taxonomy.
 
-A standard session follows this loop:
+The public journey is:
 
-1. Introduce the mission and its success criteria.
-2. Rehearse essential phrases.
-3. Complete a guided conversation.
-4. Retry independently.
-5. Handle a variation or pressure round.
-6. Review feedback and launch targeted practice.
+> landing page → local-only voice preview → waitlist → invitation → Google or passwordless email
+> sign-in → invite redemption → adult and consent setup → hint language and level → microphone test
+
+The preview is scripted, performs no model call, and stores nothing. An optional microphone
+visualizer runs locally and explicitly says that audio stays on the device.
+
+## Home and Mission Briefing
+
+Home presents one dominant recommended action, one recent improvement with evidence, and a compact
+readiness overview. All five missions remain selectable.
+
+Each briefing includes:
+
+- a practical objective and expected duration;
+- three preparation phrases with reviewed native-script hints;
+- Coach or Real-World mode selection;
+- a microphone and accessibility reminder; and
+- a prominent request to use fictional passport, booking, phone, and address details.
 
 ## Practice Modes
 
-**Coach Mode** supports A1–A2 learners with slower speech, repeat and hint controls, optional translation, and a visible transcript. It should tolerate longer thinking pauses and provide supportive recovery.
+**Coach Mode** is push-to-talk. It shows the English transcript, permits native-script hints, and
+offers Repeat, Slower, Meaning, and Hint. It tolerates longer pauses and makes recovery feel like a
+normal conversation skill.
 
-**Real-World Mode** uses natural speed, realistic follow-ups, and delayed feedback. The transcript stays hidden during the task so the result measures listening and speaking rather than reading.
+**Real-World Mode** uses hands-free voice detection. It offers Repeat, Slower, mute, and exit. The
+transcript and hints stay hidden unless the learner enables the accessibility override. The result
+then carries a clear `caption-assisted` marker.
 
-## Product Modules
+Voice sessions use a distraction-free `100dvh` stage and always expose a text label for the current
+state:
 
-| Module | Responsibility |
-|---|---|
-| Samvaad | Guided conversational lessons |
-| Uccharan | Pronunciation, stress, rhythm, and clarity |
-| Yatra | Travel missions and readiness checks |
-| Abhyaas | Short daily speaking loops |
-| Shabd | Scenario-linked vocabulary retrieval |
-| Pragati | Progress, weaknesses, and next actions |
+- connecting;
+- agent speaking;
+- ready;
+- recording;
+- thinking;
+- reconnecting;
+- paused;
+- completed; and
+- failed.
 
-These modules form one loop: mission performance creates feedback; feedback launches a Uccharan or Shabd exercise; Pragati then selects the next Abhyaas session or Yatra retry.
+Confirmed turns survive bounded reconnection. If two attempts within 20 seconds fail, the session
+ends without scoring the partial attempt.
 
-## MVP Experience
+## Results and Progress
 
-The first end-to-end mission is US immigration. It must cover identity details, travel purpose, dates, accommodation, follow-up questions, clarification requests, post-session feedback, and a retry.
+Results lead with one readiness label: `First attempt`, `Practicing`, `Nearly ready`, or `Ready`.
+The content order is:
 
-Subsequent missions are hotel check-in, restaurant ordering, asking for directions, and missing baggage. Defer social leaderboards, avatar-heavy polish, broad destination coverage, and offline voice until the core loop shows learning and retention.
+1. successful practical outcomes;
+2. one main obstacle;
+3. one two- or three-minute drill;
+4. transcript evidence;
+5. retry; and
+6. the next mission.
 
-See [learning design](learning-design.md) for progression rules and [system architecture](../architecture/system-architecture.md) for implementation boundaries.
+Progress emphasizes independent completion, successful repair, and reduced assistance. Streaks and
+generic activity totals are intentionally absent.
 
+## Visual System
+
+The code-native interface uses:
+
+| Token | Value | Use |
+|---|---|---|
+| Canvas | `#080C16` | Page and voice-stage background |
+| Surface | `#0F1728` | Standard cards |
+| Raised surface | `#18243A` | Dialogs and primary stage |
+| Reading surface | `#F7F2E8` | Editorial principles |
+| Primary | `#FFB15A` | Main actions and horizon warmth |
+| Listening | `#68E0D1` | Learner microphone and local privacy |
+| Agent | `#8D9CFF` | Conversation partner |
+| Success | `#69D69F` | Completed outcomes |
+| Error | `#FF7D86` | Recoverable failures and destructive controls |
+
+Newsreader is self-hosted for display text, Inter for interface text, and Noto Sans families for
+Devanagari, Tamil, Telugu, and Bengali scripts. Soft horizon gradients, restrained film grain,
+mission-specific SVG scenery, and a Web Audio-driven orb create atmosphere without stock
+photography, flags, mascots, or cultural stereotypes.
+
+## Accessibility
+
+Controls are at least 48 pixels, with visible keyboard focus and explicit state text. The layout
+supports 360-pixel mobile, 768-pixel tablet, and a 1280-pixel desktop shell. Reduced-motion
+preferences disable decorative movement. Color is never the only status signal, and the target is
+Web Content Accessibility Guidelines (WCAG) 2.2 AA contrast.
+
+See [learning design](learning-design.md) for progression and
+[system architecture](../architecture/system-architecture.md) for runtime boundaries.

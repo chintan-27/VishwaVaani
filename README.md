@@ -18,7 +18,34 @@ The first product slice focuses on US airport immigration, followed by hotel che
 
 ## Current Status
 
-This repository is in the planning and design stage. It does not yet contain application code, a build system, or automated tests. The documents above capture the current product decisions and should be updated when implementation evidence changes those decisions.
+This repository contains the production web MVP source, reusable FastAPI contracts, persistence
+models and migration, provider conformance adapter, generated TypeScript API client, and automated
+unit, contract, browser, and accessibility checks. Live missions remain fail-closed until Supabase,
+Railway, and an OpenAI-compatible provider are configured and the deployment conformance test
+passes. The public scripted preview remains available without those services.
+
+## Development
+
+```bash
+corepack pnpm install
+uv sync --python 3.13
+corepack pnpm dev
+uv run fastapi dev apps/api/src/vishwavaani_api/main.py
+```
+
+Run the primary checks with:
+
+```bash
+corepack pnpm lint
+corepack pnpm typecheck
+corepack pnpm test
+uv run pytest
+corepack pnpm build
+corepack pnpm test:e2e
+```
+
+Regenerate the API contract and TypeScript client after route changes with
+`corepack pnpm api:client`.
 
 ## Product Principles
 
@@ -27,4 +54,3 @@ This repository is in the planning and design stage. It does not yet contain app
 - Improve intelligibility without treating accent identity as a defect.
 - Keep live conversation low-latency and defer detailed evaluation until after the session.
 - Treat recordings, transcripts, profiles, and scores as personal data.
-

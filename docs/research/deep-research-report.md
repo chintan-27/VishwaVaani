@@ -1,5 +1,14 @@
 # VishwaVaani Product Plan
 
+> **Implementation decision update — July 2026:** The production MVP is now web-first. The
+> tracked implementation uses Next.js, FastAPI, Supabase, Railway, and a provider-neutral
+> OpenAI-compatible Realtime adapter. It does not use React Native, Expo, LiveKit, or a
+> provider-specific SDK for v1. Native clients remain a later option after the closed beta proves
+> reliability and learning value. The comparison material below remains useful research context;
+> current delivery decisions are authoritative in the
+> [system architecture](../architecture/system-architecture.md) and
+> [delivery roadmap](../delivery/roadmap.md).
+
 ## Executive summary
 
 **VishwaVaani** should be positioned as an **India-first, voice-first English speaking coach for real-world travel and everyday international conversations**, not as a generic English-learning app. The most defensible wedge is the combination of **travel task readiness**, **repair-language training**, **accent clarity without accent erasure**, **India-specific personalization**, and **voice-first rehearsal under realistic pressure**. That positioning aligns with an obvious user need: India continues to generate large volumes of international movement, with the Ministry of Tourism dashboard reporting **32.83 million Indian National Departures in 2025**, while British Council India continues to frame English as a key enabler of education, employability, and mobility in the country. citeturn9search1turn10search7turn10search13
@@ -8,7 +17,7 @@ The learning target for the first commercial product should be **functional spok
 
 The market is crowded but fragmented. Duolingo offers AI video calls with repeat/slow-down support and post-call transcripts; Speak is built around speaking from the first lesson with AI conversation and real-time feedback; ELSA is strong in pronunciation analysis, CEFR-linked reporting, role-plays, and native-language support; Busuu and Babbel add structured conversations and speech recognition; Loora offers broad AI English tutoring. However, the official positioning of these products remains mostly **general-purpose**, **broad-market**, or **pronunciation-centric**, rather than an India-specific travel fluency system built around immigration, hotels, taxis, restaurant orders, lost baggage, addresses, names, dates, and international accent comprehension. That is VishwaVaani’s opportunity. citeturn0search0turn0search1turn0search2turn1search0turn1search17turn1search2
 
-The recommended first year plan is deliberately narrow. Build one excellent vertical slice around **US airport immigration**, then expand to four additional core travel scenarios: **hotel check-in, restaurant ordering, asking for directions, and missing baggage**. Deliver them in two modes: **Coach Mode** for guided practice and **Real-World Mode** for natural-speed assessment. Under the hood, use **React Native with Expo**, **WebRTC audio**, and either **OpenAI’s Realtime API** directly or **LiveKit + model plugins** for more provider flexibility. OpenAI’s developer docs recommend **WebRTC for browser/mobile audio apps**, while LiveKit’s Agents stack is specifically designed for turn detection, interruptions, orchestration, and either realtime speech-to-speech models or STT-LLM-TTS pipelines. citeturn2search0turn2search2turn2search13turn3search0turn3search12turn3search18
+The recommended first year plan is deliberately narrow. Build one excellent vertical slice around **US airport immigration**, then expand to four additional core travel scenarios: **hotel check-in, restaurant ordering, asking for directions, and missing baggage**. Deliver them in two modes: **Coach Mode** for guided practice and **Real-World Mode** for natural-speed assessment. The production MVP now ships as a **Next.js web application** backed by **FastAPI**, with direct **WebRTC audio** through a provider-neutral OpenAI-compatible Realtime contract. A backend sideband controller owns scenario state, and a structured Chat Completions evaluator handles only the semantic dimensions that deterministic evidence cannot compute. This keeps provider credentials and learning logic out of the browser and leaves the contracts reusable by a later native client. citeturn2search0turn2search2turn2search13
 
 From a pedagogy standpoint, **Uccharan** should optimize for **intelligibility and comprehensibility**, not “sounding American.” Research summarized across pronunciation literature increasingly prioritizes **intelligibility over native-likeness**, and a modern CAPT review finds strong ongoing use of computer-assisted pronunciation training, while broader pronunciation research continues to highlight the importance of **stress, rhythm, and other suprasegmental features** alongside segmentals. Pronunciation-focused corrective feedback is useful, but the timing and intensity of feedback should be tuned carefully, because corrective feedback has benefits yet interacts with learner variability and anxiety. citeturn6search4turn6search12turn15search0turn15search2turn16search6turn16search12
 
@@ -347,7 +356,7 @@ The UI should have these defining patterns:
 | **Real-World Mode** | Natural speed, no visible transcript during task, delayed feedback only, realistic follow-ups | Needed for actual task-readiness assessment |
 | **Transcript policy** | Hidden by default during test mode; available after completion | Prevents reading dependence but preserves review value |
 | **Repair controls** | Dedicated quick actions: “Repeat”, “Slower”, “What does that mean?” | Aligns directly with CEFR clarification needs citeturn14view1 |
-| **Accessibility** | Respect screen readers, large touch targets, mic permissions, and audio state | React Native and Expo provide platform accessibility and audio capabilities that support this pattern. citeturn4search1turn4search0turn4search4 |
+| **Accessibility** | Respect screen readers, 48-pixel controls, visible focus, reduced motion, mic permissions, and explicit audio state | The web MVP targets WCAG 2.2 AA and tests keyboard, screen-reader, long native-script, reduced-motion, and denied-microphone behavior. |
 
 A lightweight wireframe sketch is below.
 
@@ -374,41 +383,46 @@ On the technical side, the fundamental architecture should separate **live conve
 
 ```mermaid
 flowchart LR
-    A[React Native App] --> B[Auth and Session API]
-    B --> C[Voice Session Token]
-    A --> D[WebRTC Connection]
-    D --> E[LiveKit Room or OpenAI Realtime]
-    E --> F[Realtime Conversation Agent]
-    F --> G[Scenario Controller]
-    F --> H[Hint and Repair Manager]
-    F --> I[Transcript Stream]
-    I --> J[Post-session Evaluator]
+    A[Next.js Web Client] --> B[FastAPI Auth and Session API]
+    A --> C[WebRTC Connection]
+    B --> D[SDP Proxy]
+    D --> E[Compatible Realtime Provider]
+    B --> F[Backend Sideband Controller]
+    F --> E
+    E --> G[Sequenced Transcript and Tool Events]
+    G --> H[(PostgreSQL)]
+    H --> I[Transactional Outbox]
+    I --> J[Celery Evaluator]
     J --> K[Scores and Feedback]
-    K --> L[Pragati and Personalization Engine]
-    L --> M[Abhyaas and Shabd Scheduler]
+    K --> L[Pragati and Personalization]
 ```
 
-The central architectural choice is whether to use **OpenAI Realtime directly** or **LiveKit as the orchestration layer**. The best recommendation is to use **LiveKit + OpenAI models** for production ambition, while keeping a direct OpenAI Realtime prototype path for early experiments. OpenAI recommends **WebRTC** for browser/mobile audio use cases, and LiveKit’s Agents SDK explicitly targets turn detection, interruptions, orchestration, and either realtime speech-to-speech or multi-model pipelines. citeturn2search0turn2search2turn3search0turn3search12turn3search16turn3search18
+The production choice is a provider-neutral adapter over the OpenAI-compatible **WebRTC** and
+**server-control** contracts. FastAPI proxies the browser SDP offer, while the backend sideband
+controller owns graph state, instructions, Voice Activity Detection (VAD), repair events, and tool
+calls. Deployment conformance must pass before the live feature flag is enabled; failure leaves the
+scripted local preview available. The earlier LiveKit comparison remains background research, not
+the v1 runtime decision. citeturn2search0turn2search2
 
-| Stack choice | Advantages | Drawbacks | Recommendation |
+| Stack choice | Advantages | Drawbacks | Decision |
 |---|---|---|---|
-| **Direct OpenAI Realtime + WebRTC** | Fastest path to a working voice prototype; official WebRTC path; lower conceptual overhead early on. citeturn2search0turn2search2 | Less provider flexibility; more custom work for orchestration, observability, and multi-stage audio flows. | Best for first proof-of-concept. |
-| **LiveKit + OpenAI realtime or pipeline models** | Stronger orchestration, room/session controls, turn handling, token-based auth, and model portability. citeturn3search0turn3search1turn3search12turn3search13 | More infrastructure to understand; may cost more operationally at the start. | Best for scalable MVP and beyond. |
-| **Pure STT → LLM → TTS pipeline** | Easier granular control, easier post-hoc debugging, model substitution. citeturn3search12 | Less natural than modern speech-to-speech, more latency, more moving parts. | Useful as a fallback and evaluation path. |
+| **Compatible Realtime + WebRTC** | Low-latency browser path, no provider key in the client, and a portable event contract. | Requires custom sideband control, conformance, observability, and reconnect handling. | **Production MVP** |
+| **LiveKit orchestration** | Mature room and agent abstractions. | Adds an orchestration dependency and provider-specific operating model before the core loop is proven. | Deferred |
+| **Pure STT → LLM → TTS pipeline** | Granular control and substitution. | More latency and moving parts. | Evaluation/fallback research only |
 
 A practical backend recommendation is:
 
 | Layer | Recommended choice | Why |
 |---|---|---|
-| Mobile client | **React Native + Expo** | Fast iteration, iOS/Android parity, mature audio and notification support, solid accessibility APIs. citeturn4search0turn4search1turn4search20 |
-| Voice transport | **WebRTC** | Best fit for live mobile/browser audio according to OpenAI docs. citeturn2search0turn2search2 |
-| Voice orchestration | **LiveKit** | Purpose-built room/session model, tokenized auth, agent dispatch, interruptions. citeturn3search1turn3search7turn3search19 |
-| Conversation model | **OpenAI realtime model family** | Natural low-latency speech-to-speech and stronger instruction following. citeturn2search1turn2search13 |
-| API backend | **FastAPI** | Good fit for Python-first product and AI orchestration |
-| Primary database | **PostgreSQL** | Best fit for learner state, sessions, payments, curriculum, analytics metadata |
-| Queue/cache | **Redis** | Session state, jobs, prompt cache, delayed evaluation |
-| Object storage | **S3-compatible storage** | Audio recordings, transcripts, exports |
-| Analytics | **Event warehouse + BI layer** | Needed for funnel, pedagogy, and retention analysis |
+| Web client | **Next.js App Router** | Responsive closed beta before native investment; strict TypeScript and accessible browser audio |
+| Voice transport | **WebRTC** | Best fit for live browser audio according to OpenAI-style contracts. citeturn2search0turn2search2 |
+| Voice orchestration | **Custom FastAPI sideband controller** | Keeps mission state, tools, and provider secrets server-side without LiveKit |
+| Conversation model | **Configurable compatible Realtime model** | Model and provider are deployment configuration, not client code |
+| API backend | **FastAPI** | Reusable contracts for web and later native clients |
+| Primary database | **Supabase PostgreSQL** | Learner, mission, session, consent, quota, audit, and outbox records |
+| Queue/cache | **Railway Redis + Celery** | Realtime state, background evaluation, and privacy jobs |
+| Object storage | **Private Supabase storage** | Short-lived export artifacts; v1 never retains raw audio |
+| Analytics | **PostHog allowlist** | Content-free product events and feature flags |
 
 ## Evaluation, personalization, privacy, and analytics
 
@@ -445,7 +459,7 @@ The minimum privacy architecture should be:
 | **Granular consent** | Separate toggles for core processing, saved recordings, and model-improvement/training use | Consent should not be bundled; withdrawal must be practical. citeturn5search5turn5search14 |
 | **Data minimization** | Store only what is needed for teaching and support | Aligns with GDPR principles and good product governance. citeturn5search1turn5search2 |
 | **Retention policy** | Publish explicit retention windows for audio, transcripts, and analytics | Users have a right to know purposes and retention. citeturn5search8 |
-| **Deletion/export** | In-app delete account, delete selected recordings, export transcript history | Strong trust signal and compliance support |
+| **Deletion/export** | In-app delete account and export transcript/result history; no recording controls are needed because v1 retains no raw audio | Strong trust signal and compliance support |
 | **Training opt-in** | Never use learner audio for model improvement without explicit, separate permission | Higher sensitivity and reputational risk |
 | **Child safety** | If serving minors, add guardian consent and age gating | Required if later expanding into schools |
 | **Security** | Encrypt at rest, encrypt in transit, least-privilege admin access, audit logs | Necessary for voice and profile data |
@@ -509,8 +523,8 @@ A lean founding team can build this, but the product will fail without curriculu
 |---|---|---|
 | Product founder / CEO | Critical | Strategy, hiring, GTM, curriculum prioritization |
 | Product designer | Critical | Voice-first UX, onboarding, feedback surfaces |
-| Full-stack / mobile engineer | Critical | React Native, Expo, API integration |
-| Backend / realtime engineer | Critical | WebRTC, LiveKit/OpenAI, evaluator pipelines |
+| Full-stack web engineer | Critical | Next.js, browser audio, accessibility, API integration |
+| Backend / realtime engineer | Critical | FastAPI, WebRTC, sideband control, evaluator pipelines |
 | Applied AI engineer | Critical | Prompting, evaluation, scenario control, data pipelines |
 | Curriculum and pedagogy lead | Critical | CEFR mapping, scenario scripts, correction policy |
 | Speech/pronunciation specialist | High | Uccharan design, phonology taxonomy, drill design |
