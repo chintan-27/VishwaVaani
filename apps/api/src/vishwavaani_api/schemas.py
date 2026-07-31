@@ -33,12 +33,30 @@ class HealthResponse(BaseModel):
     version: str
 
 
+class AuthCodeRequest(BaseModel):
+    email: EmailStr
+
+
+class AuthCodeResponse(BaseModel):
+    status: Literal["sent"] = "sent"
+    dev_code: str | None = None
+
+
+class AuthVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+class AuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    expires_in: int
+
+
 class WaitlistRequest(BaseModel):
     email: EmailStr
-    first_name: str = Field(min_length=1, max_length=80)
     goal: Literal["travel", "study", "work", "confidence"]
     is_adult: bool
-    turnstile_token: str | None = Field(default=None, max_length=2048)
 
     @field_validator("is_adult")
     @classmethod
@@ -146,6 +164,10 @@ class RepairResponse(BaseModel):
     sequence: int
 
 
+class CaptionAssistanceRequest(BaseModel):
+    enabled: bool
+
+
 class TurnEventRequest(BaseModel):
     sequence: int = Field(ge=1)
     actor: Literal["agent", "learner"]
@@ -201,10 +223,13 @@ class ProgressResponse(BaseModel):
     recommended_action: dict[str, Any] | None
 
 
-class PrivacyJobResponse(BaseModel):
-    job_id: str
-    status: Literal["pending"]
-    expected_by: datetime
+class PrivacyExportResponse(BaseModel):
+    generated_at: datetime
+    data: dict[str, Any]
+
+
+class PrivacyDeletionResponse(BaseModel):
+    status: Literal["completed"] = "completed"
 
 
 class ProviderConformanceResponse(BaseModel):

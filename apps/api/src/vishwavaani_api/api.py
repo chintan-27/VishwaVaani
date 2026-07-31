@@ -2,16 +2,18 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import httpx
-from fastapi import APIRouter, Depends, Header, Request
-from sqlalchemy import func, select
+import jwt
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from vishwavaani_api import __version__
 from vishwavaani_api.auth import ensure_user, require_principal
 from vishwavaani_api.config import Settings, get_settings
 from vishwavaani_api.database import get_db
+from vishwavaani_api.email_service import send_sign_in_code
 from vishwavaani_api.errors import APIError, request_id
+from vishwavaani_api.evaluation import evaluate_session_async
 from vishwavaani_api.idempotency import (
     remember,
     replay_or_conflict,
@@ -28,14 +30,16 @@ from vishwavaani_api.mission_catalog import (
 from vishwavaani_api.models import (
     AssistanceEvent,
     AuditEvent,
+    AuthCode,
     ConsentRecord,
     Evaluation,
     HintLocale,
+    IdempotencyRecord,
     Invitation,
-    OutboxJob,
-    PrivacyJob,
+    LearnerSkillState,
     Profile,
     Readiness,
+    Recommendation,
     Session,
     SessionMode,
     SessionStatus,
@@ -46,8 +50,13 @@ from vishwavaani_api.models import (
 )
 from vishwavaani_api.provider import ProviderAdapter, validate_realtime_events
 from vishwavaani_api.schemas import (
+    AuthCodeRequest,
+    AuthCodeResponse,
     AuthPrincipal,
+    AuthTokenResponse,
+    AuthVerifyRequest,
     BootstrapResponse,
+    CaptionAssistanceRequest,
     CompleteSessionRequest,
     CompleteSessionResponse,
     ConsentRequest,
@@ -56,7 +65,8 @@ from vishwavaani_api.schemas import (
     InviteClaimRequest,
     InviteClaimResponse,
     MissionSummary,
-    PrivacyJobResponse,
+    PrivacyDeletionResponse,
+    PrivacyExportResponse,
     ProfileUpdateRequest,
     ProgressResponse,
     ProviderConformanceResponse,
@@ -124,19 +134,111 @@ async def core_consent_active(user_id: str, db: AsyncSession) -> bool:
     return bool(latest and latest.granted)
 
 
-async def verify_turnstile(token: str | None, settings: Settings) -> bool:
-    if not settings.turnstile_secret_key:
-        return settings.app_env in {"local", "test"}
-    if not token:
-        return False
-    async with httpx.AsyncClient(timeout=6) as client:
-        response = await client.post(
-            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-            data={"secret": settings.turnstile_secret_key, "response": token},
+def as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+@router.post("/auth/code", response_model=AuthCodeResponse, tags=["auth"])
+async def request_auth_code(
+    payload: AuthCodeRequest,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> AuthCodeResponse:
+    email = normalize_email(str(payload.email))
+    email_hash = hash_value(email)
+    recent_count = await db.scalar(
+        select(func.count(AuthCode.id)).where(
+            AuthCode.email_hash == email_hash,
+            AuthCode.created_at >= now() - timedelta(minutes=15),
         )
-        response.raise_for_status()
-        body = response.json()
-        return body.get("success") is True
+    )
+    if (recent_count or 0) >= 5:
+        raise APIError(
+            code="auth_code_rate_limited",
+            message="Too many sign-in codes were requested. Try again in 15 minutes.",
+            status_code=429,
+            retryable=True,
+            retry_after_seconds=900,
+        )
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    db.add(
+        AuthCode(
+            email_hash=email_hash,
+            code_hash=hash_value(f"{settings.auth_code_pepper}:{email_hash}:{code}"),
+            expires_at=now() + timedelta(minutes=settings.auth_code_ttl_minutes),
+        )
+    )
+    await send_sign_in_code(email, code, settings)
+    await db.commit()
+    return AuthCodeResponse(
+        dev_code=code if settings.app_env in {"local", "test"} else None,
+    )
+
+
+@router.post("/auth/code/verify", response_model=AuthTokenResponse, tags=["auth"])
+async def verify_auth_code(
+    payload: AuthVerifyRequest,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> AuthTokenResponse:
+    email_hash = hash_value(normalize_email(str(payload.email)))
+    challenge = await db.scalar(
+        select(AuthCode)
+        .where(AuthCode.email_hash == email_hash, AuthCode.used_at.is_(None))
+        .order_by(AuthCode.created_at.desc())
+        .limit(1)
+    )
+    expected_hash = hash_value(f"{settings.auth_code_pepper}:{email_hash}:{payload.code}")
+    invalid = (
+        challenge is None
+        or as_utc(challenge.expires_at) <= now()
+        or challenge.attempts >= 5
+        or not constant_time_equal(challenge.code_hash, expected_hash)
+    )
+    if invalid:
+        if challenge is not None:
+            challenge.attempts += 1
+            await db.commit()
+        raise APIError(
+            code="invalid_auth_code",
+            message="That sign-in code is invalid or expired.",
+            status_code=400,
+        )
+
+    challenge.used_at = now()
+    external_auth_id = f"email:{email_hash}"
+    user = await db.scalar(select(User).where(User.external_auth_id == external_auth_id))
+    if user is None:
+        user = User(external_auth_id=external_auth_id, email_hash=email_hash)
+        db.add(user)
+        await db.flush()
+        db.add(Profile(user_id=user.id))
+    if user.access_revoked_at or user.deleted_at:
+        raise APIError(
+            code="account_access_revoked",
+            message="This account is no longer active.",
+            status_code=403,
+        )
+
+    issued_at = now()
+    expires_at = issued_at + timedelta(days=settings.auth_session_days)
+    token = jwt.encode(
+        {
+            "sub": external_auth_id,
+            "iss": settings.auth_issuer,
+            "aud": "vishwavaani-web",
+            "iat": int(issued_at.timestamp()),
+            "exp": int(expires_at.timestamp()),
+        },
+        settings.auth_secret,
+        algorithm="HS256",
+    )
+    await db.commit()
+    return AuthTokenResponse(
+        access_token=token,
+        expires_in=int((expires_at - issued_at).total_seconds()),
+    )
 
 
 @router.get("/health", response_model=HealthResponse, tags=["system"])
@@ -159,16 +261,7 @@ async def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
 async def join_waitlist(
     payload: WaitlistRequest,
     db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings),
 ) -> WaitlistResponse:
-    verified = await verify_turnstile(payload.turnstile_token, settings)
-    if not verified:
-        raise APIError(
-            code="abuse_check_failed",
-            message="Please retry the verification check.",
-            status_code=400,
-            retryable=True,
-        )
     email_hash = hash_value(normalize_email(str(payload.email)))
     existing = await db.scalar(select(WaitlistEntry).where(WaitlistEntry.email_hash == email_hash))
     if existing:
@@ -178,7 +271,6 @@ async def join_waitlist(
             email_hash=email_hash,
             goal=payload.goal,
             is_adult=payload.is_adult,
-            turnstile_verified=verified,
         )
     )
     await db.commit()
@@ -481,6 +573,7 @@ async def create_session(
             "localization": session.localization_version,
             "realtime_model": session.realtime_model,
             "evaluator_model": session.evaluator_model,
+            "transcription_model": settings.ai_transcription_model,
         },
         offer_url=f"/v1/sessions/{session.id}/realtime/offers",
     )
@@ -630,6 +723,29 @@ async def record_repair(
     return RepairResponse(accepted=True, sequence=payload.sequence)
 
 
+@router.put(
+    "/sessions/{session_id}/caption-assistance",
+    status_code=204,
+    tags=["sessions"],
+)
+async def update_caption_assistance(
+    session_id: str,
+    payload: CaptionAssistanceRequest,
+    principal: AuthPrincipal = Depends(require_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    user = await ensure_user(principal, db)
+    session = await owned_session(session_id, user.id, db)
+    if session.status not in {SessionStatus.CONNECTING, SessionStatus.ACTIVE}:
+        raise APIError(
+            code="session_not_active",
+            message="Captions cannot be changed for this session now.",
+            status_code=409,
+        )
+    session.caption_assisted = payload.enabled
+    await db.commit()
+
+
 @router.post(
     "/sessions/{session_id}/complete",
     response_model=CompleteSessionResponse,
@@ -638,9 +754,11 @@ async def record_repair(
 async def complete_session(
     session_id: str,
     payload: CompleteSessionRequest,
+    background_tasks: BackgroundTasks,
     key: str = Depends(require_idempotency_key),
     principal: AuthPrincipal = Depends(require_principal),
     db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> CompleteSessionResponse:
     user = await ensure_user(principal, db)
     replay = await replay_or_conflict(
@@ -674,13 +792,6 @@ async def complete_session(
         session.status = SessionStatus.EVALUATION_PENDING
         session.completed_at = now()
         evaluation_status = "pending"
-        db.add(
-            OutboxJob(
-                topic="session.evaluate",
-                aggregate_id=session.id,
-                payload={"session_id": session.id},
-            )
-        )
     response = CompleteSessionResponse(
         session_id=session.id,
         status=session.status,
@@ -695,6 +806,8 @@ async def complete_session(
         response_body=response.model_dump(mode="json"),
     )
     await db.commit()
+    if payload.reason == "completed" and settings.app_env != "test":
+        background_tasks.add_task(evaluate_session_async, session.id)
     return response
 
 
@@ -760,8 +873,19 @@ async def get_progress(
         session = await db.get(Session, evaluation.session_id)
         if session and evaluation.readiness:
             readiness_by_mission[session.mission_slug] = evaluation.readiness
+    independence_values = [
+        float(score["value"])
+        for evaluation in evaluated
+        if isinstance((score := evaluation.deterministic_scores.get("independence")), dict)
+        and isinstance(score.get("value"), int | float)
+    ]
+    independence_delta = (
+        independence_values[0] - independence_values[-1]
+        if len(independence_values) >= 2
+        else 0.0
+    )
     return ProgressResponse(
-        independence_delta=0.0 if not evaluated else -0.38,
+        independence_delta=independence_delta,
         valid_completions=len(evaluated),
         repair_successes=sum(
             1
@@ -772,111 +896,168 @@ async def get_progress(
         recommended_action=(
             {"type": "mission", "mission_slug": "us-immigration", "mode": "coach"}
             if not evaluated
-            else {"type": "drill", "skill": "direct-time-answers", "minutes": 2}
+            else evaluated[0].next_action
+            or {"type": "mission", "mission_slug": "hotel-check-in", "mode": "coach"}
         ),
     )
 
 
-async def create_privacy_job(
-    *,
-    kind: str,
-    user: User,
-    payload: dict[str, Any],
-    key: str,
-    request: Request,
-    db: AsyncSession,
-) -> PrivacyJobResponse:
-    operation = f"privacy_{kind}"
+@router.post("/privacy/exports", response_model=PrivacyExportResponse, tags=["privacy"])
+async def request_export(
+    key: str = Depends(require_idempotency_key),
+    principal: AuthPrincipal = Depends(require_principal),
+    db: AsyncSession = Depends(get_db),
+) -> PrivacyExportResponse:
+    user = await ensure_user(principal, db)
     replay = await replay_or_conflict(
-        db,
-        actor_key=user.id,
-        operation=operation,
-        key=key,
-        payload=payload,
+        db, actor_key=user.id, operation="privacy_export", key=key, payload={}
     )
     if replay:
-        return PrivacyJobResponse.model_validate(replay)
-    current = now()
-    job = PrivacyJob(
-        user_id=user.id,
-        kind=kind,
-        status="pending",
-        artifact_expires_at=current + timedelta(hours=24) if kind == "export" else None,
-        processor_deadline_at=current + timedelta(days=7) if kind == "delete" else None,
-        backup_expiry_at=current + timedelta(days=35) if kind == "delete" else None,
-    )
-    db.add(job)
-    await db.flush()
-    if kind == "delete":
-        user.access_revoked_at = current
-    db.add(
-        OutboxJob(
-            topic=f"privacy.{kind}",
-            aggregate_id=job.id,
-            payload={"job_id": job.id, "user_id": user.id},
+        return PrivacyExportResponse.model_validate(replay)
+
+    profile = await db.get(Profile, user.id)
+    consents = (
+        await db.scalars(
+            select(ConsentRecord)
+            .where(ConsentRecord.user_id == user.id)
+            .order_by(ConsentRecord.recorded_at)
         )
-    )
-    db.add(
-        AuditEvent(
-            actor_id=user.id,
-            action=f"privacy.{kind}.requested",
-            target_type="privacy_job",
-            target_id=job.id,
-            request_id=request_id(request),
-            safe_metadata={},
+    ).all()
+    sessions = (
+        await db.scalars(
+            select(Session).where(Session.user_id == user.id).order_by(Session.created_at)
         )
-    )
-    response = PrivacyJobResponse(
-        job_id=job.id,
-        status="pending",
-        expected_by=current + (timedelta(hours=1) if kind == "export" else timedelta(days=7)),
+    ).all()
+    session_ids = [session.id for session in sessions]
+    turns = (
+        await db.scalars(
+            select(SessionTurn)
+            .where(SessionTurn.session_id.in_(session_ids))
+            .order_by(SessionTurn.session_id, SessionTurn.sequence)
+        )
+    ).all() if session_ids else []
+    evaluations = (
+        await db.scalars(
+            select(Evaluation).where(Evaluation.session_id.in_(session_ids))
+        )
+    ).all() if session_ids else []
+    response = PrivacyExportResponse(
+        generated_at=now(),
+        data={
+            "profile": {
+                "hint_locale": profile.hint_locale if profile else None,
+                "level": profile.level if profile else None,
+                "age_confirmed": profile.age_confirmed if profile else False,
+                "onboarding_completed": profile.onboarding_completed if profile else False,
+            },
+            "consents": [
+                {
+                    "type": consent.consent_type,
+                    "version": consent.version,
+                    "granted": consent.granted,
+                    "recorded_at": consent.recorded_at,
+                }
+                for consent in consents
+            ],
+            "sessions": [
+                {
+                    "id": session.id,
+                    "mission_slug": session.mission_slug,
+                    "mode": session.mode,
+                    "status": session.status,
+                    "created_at": session.created_at,
+                    "completed_at": session.completed_at,
+                    "turns": [
+                        {
+                            "sequence": turn.sequence,
+                            "actor": turn.actor,
+                            "transcript": turn.transcript,
+                            "slot_events": turn.slot_events,
+                        }
+                        for turn in turns
+                        if turn.session_id == session.id
+                    ],
+                    "evaluation": next(
+                        (
+                            {
+                                "readiness": evaluation.readiness,
+                                "dimensions": {
+                                    **evaluation.deterministic_scores,
+                                    **(evaluation.semantic_scores or {}),
+                                },
+                                "strengths": evaluation.strengths,
+                                "main_obstacle": evaluation.main_obstacle,
+                                "next_action": evaluation.next_action,
+                            }
+                            for evaluation in evaluations
+                            if evaluation.session_id == session.id
+                        ),
+                        None,
+                    ),
+                }
+                for session in sessions
+            ],
+        },
     )
     remember(
         db,
         actor_key=user.id,
-        operation=operation,
+        operation="privacy_export",
         key=key,
-        payload=payload,
+        payload={},
         response_body=response.model_dump(mode="json"),
     )
     await db.commit()
     return response
 
 
-@router.post("/privacy/exports", response_model=PrivacyJobResponse, tags=["privacy"])
-async def request_export(
-    request: Request,
-    key: str = Depends(require_idempotency_key),
-    principal: AuthPrincipal = Depends(require_principal),
-    db: AsyncSession = Depends(get_db),
-) -> PrivacyJobResponse:
-    user = await ensure_user(principal, db)
-    return await create_privacy_job(
-        kind="export",
-        user=user,
-        payload={},
-        key=key,
-        request=request,
-        db=db,
-    )
-
-
-@router.post("/privacy/deletion", response_model=PrivacyJobResponse, tags=["privacy"])
+@router.post("/privacy/deletion", response_model=PrivacyDeletionResponse, tags=["privacy"])
 async def request_deletion(
     request: Request,
-    key: str = Depends(require_idempotency_key),
+    _key: str = Depends(require_idempotency_key),
     principal: AuthPrincipal = Depends(require_principal),
     db: AsyncSession = Depends(get_db),
-) -> PrivacyJobResponse:
+) -> PrivacyDeletionResponse:
     user = await ensure_user(principal, db)
-    return await create_privacy_job(
-        kind="delete",
-        user=user,
-        payload={},
-        key=key,
-        request=request,
-        db=db,
+    session_ids = list(
+        await db.scalars(select(Session.id).where(Session.user_id == user.id))
     )
+    if session_ids:
+        await db.execute(delete(AssistanceEvent).where(AssistanceEvent.session_id.in_(session_ids)))
+        await db.execute(delete(Evaluation).where(Evaluation.session_id.in_(session_ids)))
+        await db.execute(delete(SessionTurn).where(SessionTurn.session_id.in_(session_ids)))
+        await db.execute(delete(Session).where(Session.id.in_(session_ids)))
+    await db.execute(delete(ConsentRecord).where(ConsentRecord.user_id == user.id))
+    await db.execute(delete(Profile).where(Profile.user_id == user.id))
+    await db.execute(delete(UsageLedger).where(UsageLedger.user_id == user.id))
+    await db.execute(delete(LearnerSkillState).where(LearnerSkillState.user_id == user.id))
+    await db.execute(delete(Recommendation).where(Recommendation.user_id == user.id))
+    await db.execute(delete(IdempotencyRecord).where(IdempotencyRecord.actor_key == user.id))
+    await db.execute(
+        update(Invitation)
+        .where(Invitation.used_by_user_id == user.id)
+        .values(used_by_user_id=None)
+    )
+    await db.execute(
+        update(AuditEvent)
+        .where(AuditEvent.actor_id == user.id)
+        .values(actor_id=None, target_id=None)
+    )
+    user.email_hash = None
+    user.access_revoked_at = now()
+    user.deleted_at = now()
+    db.add(
+        AuditEvent(
+            actor_id=None,
+            action="privacy.delete.completed",
+            target_type="account",
+            target_id=None,
+            request_id=request_id(request),
+            safe_metadata={},
+        )
+    )
+    await db.commit()
+    return PrivacyDeletionResponse()
 
 
 def require_admin(

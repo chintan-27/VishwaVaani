@@ -1,39 +1,66 @@
 # VishwaVaani
 
-VishwaVaani is an India-first, voice-first English speaking coach for travel and everyday international conversations. The product is designed to help learners move from basic school English to functional spoken independence through realistic missions, pronunciation coaching, and structured feedback.
+VishwaVaani is a voice-first English practice app for five real travel situations. The web MVP has
+one deliberately small stack:
 
-The first product slice focuses on US airport immigration, followed by hotel check-in, restaurant ordering, asking for directions, and missing-baggage scenarios. Learners practice in a supported Coach Mode before attempting natural-speed Real-World Mode.
+- Next.js frontend (local or Vercel)
+- one FastAPI backend process
+- PostgreSQL in production; SQLite for zero-setup local development
+- Resend for six-digit sign-in emails
+- one OpenAI-compatible provider for live voice and post-session evaluation
 
-## Documentation
+There is no Supabase, Turnstile, Redis, Celery, separate realtime server, analytics SDK, or Sites
+deployment integration.
 
-| Area | Document |
-|---|---|
-| Product experience and module responsibilities | [Product design](docs/design/product-design.md) |
-| Curriculum, progression, and pronunciation principles | [Learning design](docs/design/learning-design.md) |
-| Voice, application, and data architecture | [System architecture](docs/architecture/system-architecture.md) |
-| Market wedge, audience, and business model | [Market positioning](docs/strategy/market-positioning.md) |
-| Scoring, personalization, privacy, and analytics | [Evaluation, privacy, and analytics](docs/quality/evaluation-privacy-and-analytics.md) |
-| MVP scope, phases, team, and risks | [Delivery roadmap](docs/delivery/roadmap.md) |
-| Evidence and detailed recommendations | [Research index](docs/research/README.md) |
+## Local development
 
-## Current Status
+The editable local environment files already exist and are ignored by Git:
 
-This repository contains the production web MVP source, reusable FastAPI contracts, persistence
-models and migration, provider conformance adapter, generated TypeScript API client, and automated
-unit, contract, browser, and accessibility checks. Live missions remain fail-closed until Supabase,
-Railway, and an OpenAI-compatible provider are configured and the deployment conformance test
-passes. The public scripted preview remains available without those services.
+- `apps/api/.env` — database, Resend, authentication, and AI credentials
+- `apps/web/.env.local` — browser-facing API URL
 
-## Development
+Install once, then run the two application processes:
 
 ```bash
 corepack pnpm install
 uv sync --python 3.13
-corepack pnpm dev
 uv run fastapi dev apps/api/src/vishwavaani_api/main.py
+corepack pnpm dev
 ```
 
-Run the primary checks with:
+Open `http://localhost:3000`. In local mode, Resend is optional: the sign-in screen displays the
+six-digit code returned by the API. Use `VAANI-DEMO` as the local invite code.
+
+To enable live AI missions, fill these values in `apps/api/.env` and restart FastAPI:
+
+```dotenv
+AI_BASE_URL=https://your-provider.example
+AI_API_KEY=your-key
+AI_REALTIME_MODEL=your-realtime-model
+AI_EVALUATOR_MODEL=your-chat-model
+```
+
+The browser sends microphone audio directly over the provider's WebRTC connection. FastAPI only
+proxies the SDP offer so the provider key never enters frontend code. The same API process saves
+transcripts and runs structured evaluation after completion. Raw audio is never stored.
+
+## Production
+
+Host `apps/web` as the Vercel project. Set `NEXT_PUBLIC_API_BASE_URL` to the public backend URL
+ending in `/v1` and keep `NEXT_PUBLIC_DEMO_MODE=false`.
+
+On the backend machine, set `DATABASE_URL` to the existing PostgreSQL database, set production
+authentication secrets, Resend, and AI variables, then run:
+
+```bash
+uv sync --frozen --no-dev
+uv run alembic upgrade head
+uv run uvicorn vishwavaani_api.main:app --app-dir apps/api/src --host 0.0.0.0 --port 8000
+```
+
+Set `WEB_PUBLIC_URL` to the Vercel origin so browser requests pass the API's CORS policy.
+
+## Verification
 
 ```bash
 corepack pnpm lint
@@ -41,16 +68,6 @@ corepack pnpm typecheck
 corepack pnpm test
 uv run pytest
 corepack pnpm build
-corepack pnpm test:e2e
 ```
 
-Regenerate the API contract and TypeScript client after route changes with
-`corepack pnpm api:client`.
-
-## Product Principles
-
-- Optimize for real task completion, not generic lesson activity.
-- Teach repair language such as asking for repetition or clarification.
-- Improve intelligibility without treating accent identity as a defect.
-- Keep live conversation low-latency and defer detailed evaluation until after the session.
-- Treat recordings, transcripts, profiles, and scores as personal data.
+Detailed product and learning decisions remain under `docs/`.

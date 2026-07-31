@@ -11,7 +11,7 @@ export function SessionRoute({ mission }: { mission: Mission }) {
   const [preferences, setPreferences] = useState<{
     mode: SessionMode;
     locale: HintLocale;
-  }>({ mode: "coach", locale: "hi-IN" });
+  } | null>(null);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
@@ -24,5 +24,6 @@ export function SessionRoute({ mission }: { mission: Mission }) {
     });
   }, []);
 
+  if (!preferences) return <div className="session-stage"><p>Preparing mission…</p></div>;
   return <VoiceSession mission={mission} {...preferences} />;
 }

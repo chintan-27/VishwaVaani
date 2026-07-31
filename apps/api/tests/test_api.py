@@ -1,6 +1,24 @@
 from fastapi.testclient import TestClient
 
 
+def test_email_code_sign_in_creates_a_valid_access_token(client: TestClient) -> None:
+    requested = client.post("/v1/auth/code", json={"email": "learner@example.com"})
+    assert requested.status_code == 200
+    code = requested.json()["dev_code"]
+    assert isinstance(code, str) and len(code) == 6
+
+    verified = client.post(
+        "/v1/auth/code/verify",
+        json={"email": "LEARNER@example.com", "code": code},
+    )
+    assert verified.status_code == 200
+    token = verified.json()["access_token"]
+
+    bootstrap = client.get("/v1/bootstrap", headers={"Authorization": f"Bearer {token}"})
+    assert bootstrap.status_code == 200
+    assert bootstrap.json()["onboarding_completed"] is False
+
+
 def test_health_exposes_provider_gate(client: TestClient) -> None:
     response = client.get("/v1/health")
     assert response.status_code == 200
@@ -11,7 +29,6 @@ def test_health_exposes_provider_gate(client: TestClient) -> None:
 def test_waitlist_minimizes_repeat_submissions(client: TestClient) -> None:
     payload = {
         "email": "Traveler@example.com",
-        "first_name": "Ananya",
         "goal": "travel",
         "is_adult": True,
     }
@@ -26,7 +43,6 @@ def test_waitlist_rejects_minors(client: TestClient) -> None:
         "/v1/waitlist",
         json={
             "email": "young@example.com",
-            "first_name": "Learner",
             "goal": "study",
             "is_adult": False,
         },
@@ -70,6 +86,7 @@ def test_session_creation_freezes_versions_and_replays(
         "localization",
         "realtime_model",
         "evaluator_model",
+        "transcription_model",
     }
 
 
@@ -129,12 +146,19 @@ def test_completed_session_queues_evaluation(
 def test_privacy_deletion_revokes_access_immediately(
     client: TestClient, ready_learner: dict[str, str]
 ) -> None:
+    export = client.post(
+        "/v1/privacy/exports",
+        headers={**ready_learner, "Idempotency-Key": "export-learner-one"},
+    )
+    assert export.status_code == 200
+    assert export.json()["data"]["profile"]["onboarding_completed"] is True
+
     deletion = client.post(
         "/v1/privacy/deletion",
         headers={**ready_learner, "Idempotency-Key": "delete-learner-one"},
     )
     assert deletion.status_code == 200
-    assert deletion.json()["status"] == "pending"
+    assert deletion.json()["status"] == "completed"
     bootstrap = client.get("/v1/bootstrap", headers=ready_learner)
     assert bootstrap.status_code == 403
     assert bootstrap.json()["error"]["code"] == "account_access_revoked"

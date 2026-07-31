@@ -1,8 +1,5 @@
-import asyncio
-
 import jwt
 from fastapi import Depends, Header
-from jwt import PyJWKClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,38 +19,22 @@ async def require_principal(
         return AuthPrincipal(subject=f"demo:{x_demo_user}", email=None)
 
     if not authorization or not authorization.startswith("Bearer "):
-        if not settings.auth_required and settings.app_env != "production":
-            return AuthPrincipal(subject="demo:local", email=None)
         raise APIError(
             code="authentication_required",
-            message="Sign in with your invited account to continue.",
+            message="Enter the sign-in code sent to your email to continue.",
             status_code=401,
         )
 
-    if not settings.supabase_jwks_url:
-        raise APIError(
-            code="authentication_unavailable",
-            message="Sign-in verification is temporarily unavailable.",
-            status_code=503,
-            retryable=True,
-            retry_after_seconds=30,
-        )
-
     token = authorization.removeprefix("Bearer ").strip()
-
-    def decode() -> dict[str, object]:
-        client = PyJWKClient(settings.supabase_jwks_url)
-        key = client.get_signing_key_from_jwt(token)
-        return jwt.decode(
-            token,
-            key.key,
-            algorithms=["RS256", "ES256"],
-            audience=settings.supabase_jwt_audience,
-            options={"require": ["exp", "sub"]},
-        )
-
     try:
-        claims = await asyncio.to_thread(decode)
+        claims = jwt.decode(
+            token,
+            settings.auth_secret,
+            algorithms=["HS256"],
+            issuer=settings.auth_issuer,
+            audience="vishwavaani-web",
+            options={"require": ["exp", "iat", "iss", "sub"]},
+        )
     except jwt.PyJWTError as exc:
         raise APIError(
             code="invalid_access_token",
@@ -68,8 +49,7 @@ async def require_principal(
             message="Your sign-in session is no longer valid. Please sign in again.",
             status_code=401,
         )
-    email = claims.get("email")
-    return AuthPrincipal(subject=subject, email=email if isinstance(email, str) else None)
+    return AuthPrincipal(subject=subject, email=None)
 
 
 async def ensure_user(

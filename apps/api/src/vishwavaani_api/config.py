@@ -16,23 +16,19 @@ class Settings(BaseSettings):
     api_public_url: str = "http://localhost:8000"
     web_public_url: str = "http://localhost:3000"
     database_url: str = "sqlite+aiosqlite:///./vishwavaani.db"
-    redis_url: str = "redis://localhost:6379/0"
-
-    supabase_url: str | None = None
-    supabase_jwt_audience: str = "authenticated"
-    supabase_jwks_url: str | None = None
-    supabase_service_role_key: str | None = None
+    auth_secret: str = "local-development-secret-change-me"
+    auth_issuer: str = "vishwavaani"
+    auth_code_pepper: str = "local-code-pepper-change-me"
+    auth_code_ttl_minutes: int = Field(default=10, ge=5, le=30)
+    auth_session_days: int = Field(default=7, ge=1, le=30)
     resend_api_key: str | None = None
     resend_from_email: str = "VishwaVaani <invite@example.com>"
-    turnstile_secret_key: str | None = None
-    posthog_api_key: str | None = None
-    sentry_dsn: str | None = None
-    otel_exporter_otlp_endpoint: str | None = None
 
     ai_base_url: str | None = None
     ai_api_key: str | None = None
     ai_realtime_model: str | None = None
     ai_evaluator_model: str | None = None
+    ai_transcription_model: str = "gpt-4o-mini-transcribe"
     ai_realtime_calls_path: str = "/v1/realtime/calls"
     ai_realtime_sideband_path: str = "/v1/realtime/calls/{call_id}/sideband"
     ai_chat_completions_path: str = "/v1/chat/completions"
@@ -41,8 +37,6 @@ class Settings(BaseSettings):
     ai_max_concurrency: int = Field(default=25, ge=1, le=250)
     ai_provider_health_ttl_seconds: int = Field(default=60, ge=5, le=600)
 
-    auth_required: bool = True
-    global_live_missions_enabled: bool = False
     admin_api_key: str | None = None
 
     daily_session_limit: int = 5
@@ -75,14 +69,24 @@ class Settings(BaseSettings):
 
     @property
     def live_missions_enabled(self) -> bool:
-        return self.global_live_missions_enabled and self.provider_configured
+        return self.provider_configured
 
     def validate_production(self) -> None:
         if self.app_env != "production":
             return
         required = {
             "DATABASE_URL": self.database_url if "sqlite" not in self.database_url else None,
-            "SUPABASE_JWKS_URL": self.supabase_jwks_url,
+            "AUTH_SECRET": self.auth_secret
+            if self.auth_secret != "local-development-secret-change-me"
+            else None,
+            "AUTH_CODE_PEPPER": self.auth_code_pepper
+            if self.auth_code_pepper != "local-code-pepper-change-me"
+            else None,
+            "RESEND_API_KEY": self.resend_api_key,
+            "AI_BASE_URL": self.ai_base_url,
+            "AI_API_KEY": self.ai_api_key,
+            "AI_REALTIME_MODEL": self.ai_realtime_model,
+            "AI_EVALUATOR_MODEL": self.ai_evaluator_model,
             "ADMIN_API_KEY": self.admin_api_key,
         }
         missing = [key for key, value in required.items() if not value]

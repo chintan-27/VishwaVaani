@@ -1,5 +1,26 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function signInAndOnboard(page: Page) {
+  await page.goto("/sign-in");
+  const email = `learner-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
+  await page.getByLabel("Email address").fill(email);
+  await page.getByRole("button", { name: /email me a sign-in code/i }).click();
+  const devCodeText = await page.getByText(/local development code:/i).textContent();
+  const code = devCodeText?.match(/\d{6}/)?.[0];
+  expect(code).toBeTruthy();
+  await page.getByLabel("Six-digit code").fill(code!);
+  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await expect(page).toHaveURL(/\/onboarding/);
+
+  await page.getByRole("button", { name: /continue/i }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
+  await page.getByRole("button", { name: /test microphone/i }).click();
+  await expect(page.getByText(/clear signal detected/i)).toBeVisible();
+  await page.getByRole("button", { name: /enter vishwavaani/i }).click();
+  await expect(page).toHaveURL(/\/app$/);
+}
 
 test("public preview is usable without an account or model call", async ({ page }) => {
   await page.goto("/");
@@ -11,6 +32,7 @@ test("public preview is usable without an account or model call", async ({ page 
 });
 
 test("mission briefing switches between both locked modes", async ({ page }) => {
+  await signInAndOnboard(page);
   await page.goto("/app/missions/us-immigration");
   await expect(page.getByRole("heading", { name: "US Immigration" })).toBeVisible();
   await page.getByText("Real-World Mode", { exact: true }).click();

@@ -1,26 +1,50 @@
+"use client";
+
 import { ArrowRight, Check, ChevronRight, Clock3, Headphones, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/button";
 import { MissionArtwork } from "@/components/mission-artwork";
+import { apiRequest } from "@/lib/api/client";
 import { missions } from "@/lib/missions";
+import type { Readiness } from "@/lib/types";
 
-export const metadata = { title: "Home" };
+interface ProgressData {
+  independence_delta: number;
+  valid_completions: number;
+  repair_successes: number;
+  readiness_by_mission: Record<string, Readiness>;
+  recommended_action: { mission_slug?: string };
+}
+
+const readinessLabel: Record<Readiness, string> = {
+  "first-attempt": "First attempt",
+  practicing: "Practicing",
+  "nearly-ready": "Nearly ready",
+  ready: "Ready",
+};
 
 export default function AppHomePage() {
-  const recommended = missions[0];
+  const [progress, setProgress] = useState<ProgressData | null>(null);
+
+  useEffect(() => {
+    apiRequest<ProgressData>("/progress").then(setProgress).catch(() => setProgress(null));
+  }, []);
+
+  const recommended = useMemo(
+    () => missions.find((mission) => mission.slug === progress?.recommended_action.mission_slug) ?? missions[0],
+    [progress],
+  );
+  const recommendedReadiness = progress?.readiness_by_mission[recommended.slug] ?? "first-attempt";
 
   return (
     <div className="dashboard" id="main-content">
       <header className="dashboard-header">
         <div>
-          <p className="eyebrow">Wednesday · Your next step</p>
-          <h1>Good morning, Ananya.</h1>
+          <p className="eyebrow">Your next step</p>
+          <h1>Welcome back.</h1>
           <p>One calm attempt today can make the real conversation feel familiar.</p>
-        </div>
-        <div className="profile-chip" aria-label="Demo learner profile">
-          <span>AR</span>
-          <div><strong>Ananya Rao</strong><small>Growing · A2</small></div>
         </div>
       </header>
 
@@ -41,7 +65,7 @@ export default function AppHomePage() {
           <MissionArtwork slug={recommended.slug} />
           <div className="readiness-badge">
             <span>Current readiness</span>
-            <strong>First attempt</strong>
+            <strong>{readinessLabel[recommendedReadiness]}</strong>
           </div>
         </div>
       </section>
@@ -50,29 +74,30 @@ export default function AppHomePage() {
         <article className="recent-improvement">
           <div className="card-heading">
             <span className="icon-chip success"><Sparkles aria-hidden="true" /></span>
-            <div><p className="eyebrow">Recent improvement</p><h2>You recovered clearly.</h2></div>
+            <div><p className="eyebrow">Your evidence</p><h2>{progress?.valid_completions ? "Practice is being recorded." : "Your first result starts here."}</h2></div>
           </div>
-          <blockquote>“Could you repeat the room number, please?”</blockquote>
-          <p>You used a repair phrase without a hint in your last hotel attempt.</p>
+          <blockquote>{progress?.valid_completions ? `${progress.valid_completions} valid mission completion${progress.valid_completions === 1 ? "" : "s"}` : "Complete a live mission to replace this empty state with real evidence."}</blockquote>
+          <p>{progress?.repair_successes ?? 0} successful repair moments recorded so far.</p>
           <Link href="/app/progress">See the evidence <ChevronRight aria-hidden="true" /></Link>
         </article>
 
         <article className="readiness-overview">
           <div className="card-heading">
             <p className="eyebrow">Travel readiness</p>
-            <strong>2 of 5 in progress</strong>
+            <strong>{progress?.valid_completions ?? 0} valid completions</strong>
           </div>
           <div className="readiness-rings">
-            <div className="ring" style={{ "--progress": "62%" } as React.CSSProperties}><span>62<small>%</small></span></div>
+            <div className="ring" style={{ "--progress": `${Math.min(100, (progress?.valid_completions ?? 0) * 20)}%` } as React.CSSProperties}><span>{Math.min(100, (progress?.valid_completions ?? 0) * 20)}<small>%</small></span></div>
             <div>
               <strong>Growing independence</strong>
-              <p>Fewer hints across familiar situations</p>
+              <p>{progress && progress.independence_delta > 0 ? `Up ${Math.round(progress.independence_delta * 100)}% across measured attempts` : "Complete two attempts to measure change"}</p>
             </div>
           </div>
           <ul>
-            <li><i className="ready" /><span>Hotel check-in</span><strong>Nearly ready</strong></li>
-            <li><i className="practice" /><span>Restaurant</span><strong>Practicing</strong></li>
-            <li><i /><span>Immigration</span><strong>Not started</strong></li>
+            {missions.slice(0, 3).map((mission) => {
+              const readiness = progress?.readiness_by_mission[mission.slug] ?? "first-attempt";
+              return <li key={mission.slug}><i className={readiness === "ready" ? "ready" : readiness === "practicing" || readiness === "nearly-ready" ? "practice" : ""} /><span>{mission.title}</span><strong>{readinessLabel[readiness]}</strong></li>;
+            })}
           </ul>
         </article>
       </section>

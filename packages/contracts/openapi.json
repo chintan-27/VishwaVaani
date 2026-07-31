@@ -6,6 +6,88 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/v1/auth/code": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Request Auth Code",
+        "operationId": "request_auth_code_v1_auth_code_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthCodeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/code/verify": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Verify Auth Code",
+        "operationId": "verify_auth_code_v1_auth_code_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthTokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/health": {
       "get": {
         "tags": [
@@ -770,6 +852,83 @@
         }
       }
     },
+    "/v1/sessions/{session_id}/caption-assistance": {
+      "put": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Update Caption Assistance",
+        "operationId": "update_caption_assistance_v1_sessions__session_id__caption_assistance_put",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-demo-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Demo-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptionAssistanceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sessions/{session_id}/complete": {
       "post": {
         "tags": [
@@ -1072,7 +1231,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PrivacyJobResponse"
+                  "$ref": "#/components/schemas/PrivacyExportResponse"
                 }
               }
             }
@@ -1153,7 +1312,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PrivacyJobResponse"
+                  "$ref": "#/components/schemas/PrivacyDeletionResponse"
                 }
               }
             }
@@ -1301,6 +1460,87 @@
   },
   "components": {
     "schemas": {
+      "AuthCodeRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "AuthCodeRequest"
+      },
+      "AuthCodeResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "sent",
+            "title": "Status",
+            "default": "sent"
+          },
+          "dev_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dev Code"
+          }
+        },
+        "type": "object",
+        "title": "AuthCodeResponse"
+      },
+      "AuthTokenResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "const": "bearer",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "expires_in"
+        ],
+        "title": "AuthTokenResponse"
+      },
+      "AuthVerifyRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^\\d{6}$",
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "code"
+        ],
+        "title": "AuthVerifyRequest"
+      },
       "BootstrapResponse": {
         "properties": {
           "user_id": {
@@ -1355,6 +1595,19 @@
           "limits"
         ],
         "title": "BootstrapResponse"
+      },
+      "CaptionAssistanceRequest": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "CaptionAssistanceRequest"
       },
       "CompleteSessionRequest": {
         "properties": {
@@ -1691,30 +1944,37 @@
         ],
         "title": "MissionSummary"
       },
-      "PrivacyJobResponse": {
+      "PrivacyDeletionResponse": {
         "properties": {
-          "job_id": {
-            "type": "string",
-            "title": "Job Id"
-          },
           "status": {
             "type": "string",
-            "const": "pending",
-            "title": "Status"
-          },
-          "expected_by": {
+            "const": "completed",
+            "title": "Status",
+            "default": "completed"
+          }
+        },
+        "type": "object",
+        "title": "PrivacyDeletionResponse"
+      },
+      "PrivacyExportResponse": {
+        "properties": {
+          "generated_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Expected By"
+            "title": "Generated At"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
           }
         },
         "type": "object",
         "required": [
-          "job_id",
-          "status",
-          "expected_by"
+          "generated_at",
+          "data"
         ],
-        "title": "PrivacyJobResponse"
+        "title": "PrivacyExportResponse"
       },
       "ProfileUpdateRequest": {
         "properties": {
@@ -2163,12 +2423,6 @@
             "format": "email",
             "title": "Email"
           },
-          "first_name": {
-            "type": "string",
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "First Name"
-          },
           "goal": {
             "type": "string",
             "enum": [
@@ -2182,24 +2436,11 @@
           "is_adult": {
             "type": "boolean",
             "title": "Is Adult"
-          },
-          "turnstile_token": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 2048
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Turnstile Token"
           }
         },
         "type": "object",
         "required": [
           "email",
-          "first_name",
           "goal",
           "is_adult"
         ],

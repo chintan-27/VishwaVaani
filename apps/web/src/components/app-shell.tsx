@@ -2,10 +2,11 @@
 
 import { Compass, House, Settings, TrendingUp } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Logo } from "@/components/logo";
+import { ApiError, apiRequest, clearAccessToken } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -17,6 +18,29 @@ const items = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [dailyLimit, setDailyLimit] = useState<number | null>(null);
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    apiRequest<{ onboarding_completed: boolean; limits: { sessions_per_day: number } }>("/bootstrap")
+      .then((bootstrap) => {
+        if (!bootstrap.onboarding_completed) {
+          router.replace("/onboarding");
+          return;
+        }
+        setDailyLimit(bootstrap.limits.sessions_per_day);
+        setAuthorized(true);
+      })
+      .catch((requestError) => {
+        if (requestError instanceof ApiError && requestError.status === 401) clearAccessToken();
+        router.replace("/sign-in");
+      });
+  }, [router]);
+
+  if (!authorized) {
+    return <div className="app-shell"><main className="app-content"><p>Loading your practice space…</p></main></div>;
+  }
 
   return (
     <div className="app-shell">
@@ -40,15 +64,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="beta-pass">
           <span>Closed beta</span>
-          <strong>4 sessions left today</strong>
-          <div aria-label="Four out of five sessions available">
-            <i />
-            <i />
-            <i />
-            <i />
-            <i className="used" />
-          </div>
-          <small>Daily limit resets at midnight</small>
+          <strong>{dailyLimit} live sessions per day</strong>
+          <small>Your usage is enforced by the API.</small>
         </div>
       </aside>
       <main className="app-content">{children}</main>

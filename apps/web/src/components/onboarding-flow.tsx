@@ -2,10 +2,11 @@
 
 import { Check, ChevronLeft, ChevronRight, Mic, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AudioOrb } from "@/components/audio-orb";
 import { Button } from "@/components/button";
+import { ApiError, apiRequest, clearAccessToken } from "@/lib/api/client";
 import { localeLabels } from "@/lib/missions";
 import type { HintLocale } from "@/lib/types";
 
@@ -17,10 +18,79 @@ export function OnboardingFlow() {
   const [locale, setLocale] = useState<HintLocale>("hi-IN");
   const [level, setLevel] = useState("new");
   const [micChecked, setMicChecked] = useState(false);
+  const [inviteCode, setInviteCode] = useState("VAANI-DEMO");
+  const [researchConsent, setResearchConsent] = useState(false);
+  const [modelConsent, setModelConsent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const next = () => {
-    if (step === steps.length - 1) router.push("/app");
-    else setStep((current) => current + 1);
+  useEffect(() => {
+    apiRequest<{ onboarding_completed: boolean }>("/bootstrap")
+      .then((bootstrap) => {
+        if (bootstrap.onboarding_completed) router.replace("/app");
+      })
+      .catch((requestError) => {
+        if (requestError instanceof ApiError && requestError.status === 401) {
+          clearAccessToken();
+          router.replace("/sign-in");
+        }
+      });
+  }, [router]);
+
+  const next = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (step === 0) {
+        await apiRequest("/invites/claim", {
+          method: "POST",
+          idempotencyKey: crypto.randomUUID(),
+          body: JSON.stringify({ code: inviteCode, age_confirmed: true }),
+        });
+      } else if (step === 1) {
+        await apiRequest("/consents", {
+          method: "POST",
+          body: JSON.stringify({
+            choices: [
+              { consent_type: "core_live_processing", version: "1.0", granted: true },
+              { consent_type: "research", version: "1.0", granted: researchConsent },
+              { consent_type: "model_improvement", version: "1.0", granted: modelConsent },
+            ],
+          }),
+        });
+      } else if (step === 2) {
+        await apiRequest("/profile", {
+          method: "PUT",
+          body: JSON.stringify({ hint_locale: locale, level, caption_override: false }),
+        });
+      }
+
+      if (step === steps.length - 1) router.push("/app");
+      else setStep((current) => current + 1);
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 401) {
+        clearAccessToken();
+        router.replace("/sign-in");
+      } else {
+        setError(requestError instanceof Error ? requestError.message : "Could not save this step.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const testMicrophone = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      setMicChecked(true);
+    } catch {
+      setError("Microphone access was denied. Allow it in your browser, then try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -42,7 +112,13 @@ export function OnboardingFlow() {
             <p>Invitations are tied to one account and help us keep the early beta reliable.</p>
             <div className="field">
               <label htmlFor="invite-code">Invite code</label>
-              <input id="invite-code" defaultValue="VAANI-DEMO" autoCapitalize="characters" />
+              <input
+                id="invite-code"
+                value={inviteCode}
+                onChange={(event) => setInviteCode(event.target.value)}
+                autoCapitalize="characters"
+                required
+              />
             </div>
             <div className="age-confirm">
               <ShieldCheck aria-hidden="true" />
@@ -68,7 +144,11 @@ export function OnboardingFlow() {
                 </span>
               </label>
               <label>
-                <input type="checkbox" />
+                <input
+                  type="checkbox"
+                  checked={researchConsent}
+                  onChange={(event) => setResearchConsent(event.target.checked)}
+                />
                 <span>
                   <strong>Optional research participation</strong>
                   Allow de-identified learning data to be included in fairness audits. Off by
@@ -76,7 +156,11 @@ export function OnboardingFlow() {
                 </span>
               </label>
               <label>
-                <input type="checkbox" />
+                <input
+                  type="checkbox"
+                  checked={modelConsent}
+                  onChange={(event) => setModelConsent(event.target.checked)}
+                />
                 <span>
                   <strong>Optional model improvement</strong>
                   Allow minimized transcript excerpts to improve prompts. Off by default.
@@ -142,8 +226,8 @@ export function OnboardingFlow() {
             <h1>Let’s make sure we can hear you.</h1>
             <p>Say “I’m ready to begin.” The sound check is processed locally and not saved.</p>
             <AudioOrb state={micChecked ? "completed" : "ready"} level={micChecked ? 0.3 : 0.15} />
-            <Button variant="secondary" onClick={() => setMicChecked(true)}>
-              <Mic aria-hidden="true" /> {micChecked ? "Microphone sounds good" : "Test microphone"}
+            <Button variant="secondary" onClick={testMicrophone} disabled={loading}>
+              <Mic aria-hidden="true" /> {micChecked ? "Microphone sounds good" : loading ? "Listening…" : "Test microphone"}
             </Button>
             {micChecked && (
               <div className="mic-success" role="status">
@@ -154,6 +238,8 @@ export function OnboardingFlow() {
           </div>
         )}
 
+        {error && <p className="config-note" role="alert">{error}</p>}
+
         <div className="onboarding-actions">
           {step > 0 ? (
             <Button variant="ghost" onClick={() => setStep((current) => current - 1)}>
@@ -162,8 +248,11 @@ export function OnboardingFlow() {
           ) : (
             <span />
           )}
-          <Button onClick={next} disabled={step === 3 && !micChecked}>
-            {step === steps.length - 1 ? "Enter VishwaVaani" : "Continue"}
+          <Button
+            onClick={next}
+            disabled={loading || (step === 0 && inviteCode.length < 6) || (step === 3 && !micChecked)}
+          >
+            {loading ? "Saving…" : step === steps.length - 1 ? "Enter VishwaVaani" : "Continue"}
             <ChevronRight aria-hidden="true" />
           </Button>
         </div>

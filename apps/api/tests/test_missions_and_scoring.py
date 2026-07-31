@@ -1,7 +1,7 @@
 import pytest
 from vishwavaani_api.mission_catalog import MISSION_CATALOG, validate_graph
 from vishwavaani_api.models import Readiness
-from vishwavaani_api.realtime_controller import ScenarioState
+from vishwavaani_api.scenario import ScenarioState
 from vishwavaani_api.scoring import (
     clarity_score,
     deterministic_scores,

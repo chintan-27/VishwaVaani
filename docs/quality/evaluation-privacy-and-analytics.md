@@ -21,7 +21,7 @@ recognition confidence alone cannot determine clarity. Repair language receives 
 accent-erasure recommendation is a release-blocking defect.
 
 Evaluation uses the frozen transcript and session configuration. Pydantic validates strict JSON
-output. Retry delays are 5, 30, and 120 seconds and are idempotent. Exhausted or invalid evaluation
+output. The API performs evaluation after the response is sent. Invalid or unavailable evaluation
 stays pending rather than inventing a result.
 
 ## Learner Model
@@ -46,7 +46,7 @@ Persisted learning data is limited to:
 - frozen mission/session configuration;
 - sequenced transcript, slot, assistance, timing, and connection events;
 - validated evaluation and learner state; and
-- minimized audit, quota, idempotency, privacy, and outbox records.
+- minimized audit, quota, idempotency, and privacy records.
 
 Names, emails, transcripts, utterances, and audio must never be sent to product analytics, crash
 reporting, traces, or general logs.
@@ -60,17 +60,18 @@ reporting, traces, or general logs.
 | Content-minimized security logs | 180 days |
 | Prepared export artifacts | 24 hours |
 
-Deletion revokes access immediately, removes active-system and processor data within seven days,
-and expires backups within 35 days. Export and deletion require idempotency keys and produce
-audited outbox jobs. Export objects use private storage and short-lived access.
+Deletion revokes access immediately. Export and deletion requests require idempotency keys and are
+audited. The production backup-retention and processor-deletion procedure must be verified before
+external beta traffic.
 
 Counsel must review the final consent, notice, processor contracts, retention implementation, and
 incident workflow against the official Digital Personal Data Protection Rules and CERT-In
 directions before beta traffic.
 
-## Analytics Allowlist
+## Product Metrics
 
-PostHog receives only allowlisted, content-free events such as:
+The MVP has no third-party analytics SDK. If operational metrics are added later, only
+content-free events may be counted, such as:
 
 - waitlist submitted;
 - onboarding step completed;
@@ -80,7 +81,7 @@ PostHog receives only allowlisted, content-free events such as:
 - repair control category used;
 - evaluation became available;
 - retry or recommended drill selected; and
-- privacy job completed.
+- data export or deletion completed.
 
 Allowed properties are coarse mission slug, mode, locale, version, state, latency bucket, assistance
 count, and readiness label. User names, email addresses, transcripts, utterances, slot values, raw
@@ -94,4 +95,4 @@ valid completion, semantic scoring, clarity abstention, wording, and learner und
 
 At least 80% of moderated first-time users must start a mission unaided and 85% must understand
 their feedback. No cohort advances with an open P0/P1 defect, incomplete localization approval, a
-failed privacy job, or an unresolved accent-erasure finding.
+failed export or deletion check, or an unresolved accent-erasure finding.

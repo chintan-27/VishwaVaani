@@ -9,7 +9,7 @@ taxonomy.
 
 The public journey is:
 
-> landing page → local-only voice preview → waitlist → invitation → Google or passwordless email
+> landing page → local-only voice preview → waitlist → invitation → passwordless email code
 > sign-in → invite redemption → adult and consent setup → hint language and level → microphone test
 
 The preview is scripted, performs no model call, and stores nothing. An optional microphone

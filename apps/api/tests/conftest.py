@@ -3,8 +3,6 @@ from collections.abc import Iterator
 
 os.environ["APP_ENV"] = "test"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:////private/tmp/vishwavaani-test.db"
-os.environ["AUTH_REQUIRED"] = "false"
-os.environ["GLOBAL_LIVE_MISSIONS_ENABLED"] = "true"
 os.environ["AI_BASE_URL"] = "https://provider.example"
 os.environ["AI_API_KEY"] = "test-key"
 os.environ["AI_REALTIME_MODEL"] = "realtime-test"

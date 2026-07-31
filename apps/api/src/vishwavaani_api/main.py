@@ -2,7 +2,6 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,14 +12,6 @@ from vishwavaani_api.errors import install_error_handlers
 from vishwavaani_api.models import Base
 
 settings = get_settings()
-
-if settings.sentry_dsn:
-    sentry_sdk.init(
-        dsn=settings.sentry_dsn,
-        environment=settings.app_env,
-        send_default_pii=False,
-        traces_sample_rate=0.05,
-    )
 
 
 @asynccontextmanager

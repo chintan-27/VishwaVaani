@@ -1487,16 +1487,6 @@ fieldset legend {
   accent-color: var(--primary);
 }
 
-.turnstile-placeholder {
-  min-height: 48px;
-  border: 1px dashed var(--line-strong);
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  color: #657087;
-  font-size: 0.65rem;
-}
-
 .waitlist-form > small,
 .config-note {
   color: #687389;
@@ -3071,6 +3061,7 @@ fieldset legend {
   border-color: rgba(104, 224, 209, 0.4);
   background: rgba(104, 224, 209, 0.11);
   color: var(--listening);
+  cursor: default;
 }
 
 .session-controls > .button:last-child {

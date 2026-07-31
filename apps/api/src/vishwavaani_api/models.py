@@ -81,6 +81,17 @@ class User(Base, TimestampMixin):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class AuthCode(Base):
+    __tablename__ = "auth_codes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    email_hash: Mapped[str] = mapped_column(String(64), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
 class Profile(Base, TimestampMixin):
     __tablename__ = "profiles"
 
@@ -103,7 +114,6 @@ class WaitlistEntry(Base, TimestampMixin):
     goal: Mapped[str] = mapped_column(String(32))
     is_adult: Mapped[bool] = mapped_column(Boolean)
     source: Mapped[str] = mapped_column(String(64), default="web")
-    turnstile_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     invitation_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
@@ -310,34 +320,3 @@ class AuditEvent(Base):
     request_id: Mapped[str] = mapped_column(String(36), index=True)
     safe_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-
-class OutboxJob(Base):
-    __tablename__ = "outbox_jobs"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
-    topic: Mapped[str] = mapped_column(String(64), index=True)
-    aggregate_id: Mapped[str] = mapped_column(String(128), index=True)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
-    status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
-    attempts: Mapped[int] = mapped_column(Integer, default=0)
-    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_error_code: Mapped[str | None] = mapped_column(String(64))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-    __table_args__ = (UniqueConstraint("topic", "aggregate_id", name="uq_outbox_topic_aggregate"),)
-
-
-class PrivacyJob(Base, TimestampMixin):
-    __tablename__ = "privacy_jobs"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
-    kind: Mapped[str] = mapped_column(String(16))
-    status: Mapped[str] = mapped_column(String(24), default="pending")
-    artifact_key: Mapped[str | None] = mapped_column(String(256))
-    artifact_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    processor_deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    backup_expiry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

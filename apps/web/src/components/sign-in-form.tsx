@@ -5,14 +5,60 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/button";
+import { apiRequest, setAccessToken } from "@/lib/api/client";
+
+interface CodeResponse {
+  status: "sent";
+  dev_code?: string | null;
+}
+
+interface TokenResponse {
+  access_token: string;
+}
 
 export function SignInForm() {
   const router = useRouter();
   const [sent, setSent] = useState(false);
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [devCode, setDevCode] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSent(true);
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiRequest<CodeResponse>("/auth/code", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      setDevCode(response.dev_code ?? null);
+      setSent(true);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Could not send a code.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verify = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiRequest<TokenResponse>("/auth/code/verify", {
+        method: "POST",
+        body: JSON.stringify({ email, code }),
+      });
+      setAccessToken(response.access_token);
+      router.push("/onboarding");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Could not verify the code.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (sent) {
@@ -21,12 +67,34 @@ export function SignInForm() {
         <span>
           <Mail aria-hidden="true" />
         </span>
-        <h2>Check your inbox</h2>
-        <p>
-          We sent a one-time sign-in link. It expires in 15 minutes and can only be used once.
-        </p>
-        <Button onClick={() => router.push("/onboarding")}>Continue demo onboarding</Button>
-        <button className="text-button" onClick={() => setSent(false)}>
+        <h2>Enter your sign-in code</h2>
+        <p>We sent a six-digit code to {email}. It expires in 10 minutes.</p>
+        {devCode && (
+          <p className="config-note">
+            Local development code: <strong>{devCode}</strong>
+          </p>
+        )}
+        <form className="sign-in-form" onSubmit={verify}>
+          <div className="field">
+            <label htmlFor="sign-in-code">Six-digit code</label>
+            <input
+              id="sign-in-code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              value={code}
+              onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
+              required
+              autoFocus
+            />
+          </div>
+          {error && <p className="config-note" role="alert">{error}</p>}
+          <Button type="submit" disabled={loading || code.length !== 6}>
+            {loading ? "Signing in…" : "Sign in"}
+          </Button>
+        </form>
+        <button className="text-button" onClick={() => { setSent(false); setCode(""); setError(null); }}>
           Use a different email
         </button>
       </div>
@@ -35,23 +103,26 @@ export function SignInForm() {
 
   return (
     <div>
-      <Button className="google-button" variant="secondary" onClick={() => router.push("/onboarding")}>
-        <span className="google-mark" aria-hidden="true">G</span>
-        Continue with Google
-      </Button>
-      <div className="or-divider"><span>or</span></div>
       <form className="sign-in-form" onSubmit={submit}>
         <div className="field">
           <label htmlFor="sign-in-email">Email address</label>
-          <input id="sign-in-email" type="email" required autoComplete="email" placeholder="you@example.com" />
+          <input
+            id="sign-in-email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
         </div>
-        <Button size="large" type="submit">
-          Email me a sign-in link
+        {error && <p className="config-note" role="alert">{error}</p>}
+        <Button size="large" type="submit" disabled={loading}>
+          {loading ? "Sending…" : "Email me a sign-in code"}
         </Button>
       </form>
       <p className="config-note">
-        Demo authentication is active in this build. Connect Supabase and Resend to enable real
-        Google and passwordless sign-in.
+        No password and no third-party auth account. Resend delivers the one-time code.
       </p>
     </div>
   );

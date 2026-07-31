@@ -68,27 +68,6 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_mission_versions_slug"), "mission_versions", ["slug"], unique=False)
     op.create_table(
-        "outbox_jobs",
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("topic", sa.String(length=64), nullable=False),
-        sa.Column("aggregate_id", sa.String(length=128), nullable=False),
-        sa.Column("payload", sa.JSON(), nullable=False),
-        sa.Column("status", sa.String(length=24), nullable=False),
-        sa.Column("attempts", sa.Integer(), nullable=False),
-        sa.Column("available_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("claimed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("last_error_code", sa.String(length=64), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("topic", "aggregate_id", name="uq_outbox_topic_aggregate"),
-    )
-    op.create_index(
-        op.f("ix_outbox_jobs_aggregate_id"), "outbox_jobs", ["aggregate_id"], unique=False
-    )
-    op.create_index(op.f("ix_outbox_jobs_status"), "outbox_jobs", ["status"], unique=False)
-    op.create_index(op.f("ix_outbox_jobs_topic"), "outbox_jobs", ["topic"], unique=False)
-    op.create_table(
         "users",
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("external_auth_id", sa.String(length=128), nullable=False),
@@ -108,7 +87,6 @@ def upgrade() -> None:
         sa.Column("goal", sa.String(length=32), nullable=False),
         sa.Column("is_adult", sa.Boolean(), nullable=False),
         sa.Column("source", sa.String(length=64), nullable=False),
-        sa.Column("turnstile_verified", sa.Boolean(), nullable=False),
         sa.Column("invitation_sent_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -210,25 +188,6 @@ def upgrade() -> None:
         ["mission_version_id"],
         unique=False,
     )
-    op.create_table(
-        "privacy_jobs",
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("user_id", sa.String(length=36), nullable=False),
-        sa.Column("kind", sa.String(length=16), nullable=False),
-        sa.Column("status", sa.String(length=24), nullable=False),
-        sa.Column("artifact_key", sa.String(length=256), nullable=True),
-        sa.Column("artifact_expires_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("processor_deadline_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("backup_expiry_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["user_id"],
-            ["users.id"],
-        ),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(op.f("ix_privacy_jobs_user_id"), "privacy_jobs", ["user_id"], unique=False)
     op.create_table(
         "profiles",
         sa.Column("user_id", sa.String(length=36), nullable=False),
@@ -439,8 +398,6 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_recommendations_user_id"), table_name="recommendations")
     op.drop_table("recommendations")
     op.drop_table("profiles")
-    op.drop_index(op.f("ix_privacy_jobs_user_id"), table_name="privacy_jobs")
-    op.drop_table("privacy_jobs")
     op.drop_index(
         op.f("ix_mission_localizations_mission_version_id"), table_name="mission_localizations"
     )
@@ -458,10 +415,6 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_users_external_auth_id"), table_name="users")
     op.drop_index(op.f("ix_users_email_hash"), table_name="users")
     op.drop_table("users")
-    op.drop_index(op.f("ix_outbox_jobs_topic"), table_name="outbox_jobs")
-    op.drop_index(op.f("ix_outbox_jobs_status"), table_name="outbox_jobs")
-    op.drop_index(op.f("ix_outbox_jobs_aggregate_id"), table_name="outbox_jobs")
-    op.drop_table("outbox_jobs")
     op.drop_index(op.f("ix_mission_versions_slug"), table_name="mission_versions")
     op.drop_table("mission_versions")
     op.drop_table("idempotency_records")

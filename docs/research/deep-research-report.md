@@ -1,10 +1,11 @@
 # VishwaVaani Product Plan
 
 > **Implementation decision update — July 2026:** The production MVP is now web-first. The
-> tracked implementation uses Next.js, FastAPI, Supabase, Railway, and a provider-neutral
-> OpenAI-compatible Realtime adapter. It does not use React Native, Expo, LiveKit, or a
-> provider-specific SDK for v1. Native clients remain a later option after the closed beta proves
-> reliability and learning value. The comparison material below remains useful research context;
+> tracked implementation uses Next.js, one FastAPI process, the operator's PostgreSQL, Resend, and
+> a provider-neutral OpenAI-compatible Realtime adapter. It does not use a separate identity
+> platform, queue, cache, analytics service, React Native, Expo, or LiveKit for v1. Native clients
+> remain a later option after the closed beta proves reliability and learning value. The comparison
+> material below remains useful research context;
 > current delivery decisions are authoritative in the
 > [system architecture](../architecture/system-architecture.md) and
 > [delivery roadmap](../delivery/roadmap.md).
@@ -17,7 +18,7 @@ The learning target for the first commercial product should be **functional spok
 
 The market is crowded but fragmented. Duolingo offers AI video calls with repeat/slow-down support and post-call transcripts; Speak is built around speaking from the first lesson with AI conversation and real-time feedback; ELSA is strong in pronunciation analysis, CEFR-linked reporting, role-plays, and native-language support; Busuu and Babbel add structured conversations and speech recognition; Loora offers broad AI English tutoring. However, the official positioning of these products remains mostly **general-purpose**, **broad-market**, or **pronunciation-centric**, rather than an India-specific travel fluency system built around immigration, hotels, taxis, restaurant orders, lost baggage, addresses, names, dates, and international accent comprehension. That is VishwaVaani’s opportunity. citeturn0search0turn0search1turn0search2turn1search0turn1search17turn1search2
 
-The recommended first year plan is deliberately narrow. Build one excellent vertical slice around **US airport immigration**, then expand to four additional core travel scenarios: **hotel check-in, restaurant ordering, asking for directions, and missing baggage**. Deliver them in two modes: **Coach Mode** for guided practice and **Real-World Mode** for natural-speed assessment. The production MVP now ships as a **Next.js web application** backed by **FastAPI**, with direct **WebRTC audio** through a provider-neutral OpenAI-compatible Realtime contract. A backend sideband controller owns scenario state, and a structured Chat Completions evaluator handles only the semantic dimensions that deterministic evidence cannot compute. This keeps provider credentials and learning logic out of the browser and leaves the contracts reusable by a later native client. citeturn2search0turn2search2turn2search13
+The recommended first year plan is deliberately narrow. Build one excellent vertical slice around **US airport immigration**, then expand to four additional core travel scenarios: **hotel check-in, restaurant ordering, asking for directions, and missing baggage**. Deliver them in two modes: **Coach Mode** for guided practice and **Real-World Mode** for natural-speed assessment. The production MVP now ships as a **Next.js web application** backed by one **FastAPI** process, with direct **WebRTC audio** through a provider-neutral OpenAI-compatible Realtime contract. The API persists scenario events and runs a structured Chat Completions evaluator for the semantic dimensions that deterministic evidence cannot compute. This keeps provider credentials and learning logic out of the browser and leaves the contracts reusable by a later native client. citeturn2search0turn2search2turn2search13
 
 From a pedagogy standpoint, **Uccharan** should optimize for **intelligibility and comprehensibility**, not “sounding American.” Research summarized across pronunciation literature increasingly prioritizes **intelligibility over native-likeness**, and a modern CAPT review finds strong ongoing use of computer-assisted pronunciation training, while broader pronunciation research continues to highlight the importance of **stress, rhythm, and other suprasegmental features** alongside segmentals. Pronunciation-focused corrective feedback is useful, but the timing and intensity of feedback should be tuned carefully, because corrective feedback has benefits yet interacts with learner variability and anxiety. citeturn6search4turn6search12turn15search0turn15search2turn16search6turn16search12
 
@@ -387,22 +388,18 @@ flowchart LR
     A --> C[WebRTC Connection]
     B --> D[SDP Proxy]
     D --> E[Compatible Realtime Provider]
-    B --> F[Backend Sideband Controller]
-    F --> E
     E --> G[Sequenced Transcript and Tool Events]
     G --> H[(PostgreSQL)]
-    H --> I[Transactional Outbox]
-    I --> J[Celery Evaluator]
-    J --> K[Scores and Feedback]
-    K --> L[Pragati and Personalization]
+    H --> I[FastAPI Evaluation Task]
+    I --> J[Scores and Feedback]
+    J --> K[Pragati and Personalization]
 ```
 
-The production choice is a provider-neutral adapter over the OpenAI-compatible **WebRTC** and
-**server-control** contracts. FastAPI proxies the browser SDP offer, while the backend sideband
-controller owns graph state, instructions, Voice Activity Detection (VAD), repair events, and tool
-calls. Deployment conformance must pass before the live feature flag is enabled; failure leaves the
-scripted local preview available. The earlier LiveKit comparison remains background research, not
-the v1 runtime decision. citeturn2search0turn2search2
+The production choice is a provider-neutral adapter over the OpenAI-compatible **WebRTC** contract.
+FastAPI proxies the browser SDP offer and stores graph, repair, transcript, and tool events. The
+Realtime data channel carries instructions, Voice Activity Detection (VAD), and tool calls. Missing
+provider configuration leaves the scripted local preview available. The earlier LiveKit comparison
+remains background research, not the v1 runtime decision. citeturn2search0turn2search2
 
 | Stack choice | Advantages | Drawbacks | Decision |
 |---|---|---|---|
@@ -416,13 +413,13 @@ A practical backend recommendation is:
 |---|---|---|
 | Web client | **Next.js App Router** | Responsive closed beta before native investment; strict TypeScript and accessible browser audio |
 | Voice transport | **WebRTC** | Best fit for live browser audio according to OpenAI-style contracts. citeturn2search0turn2search2 |
-| Voice orchestration | **Custom FastAPI sideband controller** | Keeps mission state, tools, and provider secrets server-side without LiveKit |
+| Voice orchestration | **Browser data channel + FastAPI persistence** | Keeps the provider key server-side without another service |
 | Conversation model | **Configurable compatible Realtime model** | Model and provider are deployment configuration, not client code |
 | API backend | **FastAPI** | Reusable contracts for web and later native clients |
-| Primary database | **Supabase PostgreSQL** | Learner, mission, session, consent, quota, audit, and outbox records |
-| Queue/cache | **Railway Redis + Celery** | Realtime state, background evaluation, and privacy jobs |
-| Object storage | **Private Supabase storage** | Short-lived export artifacts; v1 never retains raw audio |
-| Analytics | **PostHog allowlist** | Content-free product events and feature flags |
+| Primary database | **Operator-managed PostgreSQL** | Learner, mission, session, consent, quota, and audit records |
+| Background evaluation | **FastAPI background task** | The simplest viable post-session evaluation path for the closed beta |
+| Email | **Resend** | Six-digit passwordless sign-in codes |
+| Analytics | **None in v1** | Avoid another processor until product metrics justify it |
 
 ## Evaluation, personalization, privacy, and analytics
 

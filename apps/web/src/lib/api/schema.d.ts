@@ -1,11 +1,13 @@
 /**
  * Generated from packages/contracts/openapi.json. Do not edit by hand.
  */
-export type ApiPath = "/v1/admin/invitations" | "/v1/admin/provider/conformance" | "/v1/bootstrap" | "/v1/consents" | "/v1/health" | "/v1/invites/claim" | "/v1/missions" | "/v1/missions/{slug}" | "/v1/privacy/deletion" | "/v1/privacy/exports" | "/v1/profile" | "/v1/progress" | "/v1/sessions" | "/v1/sessions/{session_id}/complete" | "/v1/sessions/{session_id}/evaluation" | "/v1/sessions/{session_id}/realtime/offers" | "/v1/sessions/{session_id}/repairs" | "/v1/sessions/{session_id}/turns" | "/v1/waitlist";
+export type ApiPath = "/v1/admin/invitations" | "/v1/admin/provider/conformance" | "/v1/auth/code" | "/v1/auth/code/verify" | "/v1/bootstrap" | "/v1/consents" | "/v1/health" | "/v1/invites/claim" | "/v1/missions" | "/v1/missions/{slug}" | "/v1/privacy/deletion" | "/v1/privacy/exports" | "/v1/profile" | "/v1/progress" | "/v1/sessions" | "/v1/sessions/{session_id}/caption-assistance" | "/v1/sessions/{session_id}/complete" | "/v1/sessions/{session_id}/evaluation" | "/v1/sessions/{session_id}/realtime/offers" | "/v1/sessions/{session_id}/repairs" | "/v1/sessions/{session_id}/turns" | "/v1/waitlist";
 
 export interface ApiMethodByPath {
   "/v1/admin/invitations": "POST";
   "/v1/admin/provider/conformance": "POST";
+  "/v1/auth/code": "POST";
+  "/v1/auth/code/verify": "POST";
   "/v1/bootstrap": "GET";
   "/v1/consents": "POST";
   "/v1/health": "GET";
@@ -17,6 +19,7 @@ export interface ApiMethodByPath {
   "/v1/profile": "PUT";
   "/v1/progress": "GET";
   "/v1/sessions": "POST";
+  "/v1/sessions/{session_id}/caption-assistance": "PUT";
   "/v1/sessions/{session_id}/complete": "POST";
   "/v1/sessions/{session_id}/evaluation": "GET";
   "/v1/sessions/{session_id}/realtime/offers": "POST";
@@ -28,6 +31,8 @@ export interface ApiMethodByPath {
 export interface paths {
   "/v1/admin/invitations": { [method: string]: unknown };
   "/v1/admin/provider/conformance": { [method: string]: unknown };
+  "/v1/auth/code": { [method: string]: unknown };
+  "/v1/auth/code/verify": { [method: string]: unknown };
   "/v1/bootstrap": { [method: string]: unknown };
   "/v1/consents": { [method: string]: unknown };
   "/v1/health": { [method: string]: unknown };
@@ -39,6 +44,7 @@ export interface paths {
   "/v1/profile": { [method: string]: unknown };
   "/v1/progress": { [method: string]: unknown };
   "/v1/sessions": { [method: string]: unknown };
+  "/v1/sessions/{session_id}/caption-assistance": { [method: string]: unknown };
   "/v1/sessions/{session_id}/complete": { [method: string]: unknown };
   "/v1/sessions/{session_id}/evaluation": { [method: string]: unknown };
   "/v1/sessions/{session_id}/realtime/offers": { [method: string]: unknown };

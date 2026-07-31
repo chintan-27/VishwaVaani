@@ -4,14 +4,31 @@ import { Check, LoaderCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/button";
+import { apiRequest } from "@/lib/api/client";
 
 export function WaitlistForm() {
   const [state, setState] = useState<"idle" | "submitting" | "done">("idle");
+  const [error, setError] = useState<string | null>(null);
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setState("submitting");
-    window.setTimeout(() => setState("done"), 750);
+    setError(null);
+    const data = new FormData(event.currentTarget);
+    try {
+      await apiRequest("/waitlist", {
+        method: "POST",
+        body: JSON.stringify({
+          email: data.get("email"),
+          goal: data.get("goal"),
+          is_adult: data.get("is_adult") === "on",
+        }),
+      });
+      setState("done");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Could not join the waitlist.");
+      setState("idle");
+    }
   };
 
   if (state === "done") {
@@ -36,10 +53,6 @@ export function WaitlistForm() {
   return (
     <form className="waitlist-form" onSubmit={submit}>
       <div className="field">
-        <label htmlFor="name">First name</label>
-        <input id="name" name="name" autoComplete="given-name" required placeholder="Aarav" />
-      </div>
-      <div className="field">
         <label htmlFor="email">Email address</label>
         <input
           id="email"
@@ -62,14 +75,12 @@ export function WaitlistForm() {
         </div>
       </fieldset>
       <label className="check-row">
-        <input type="checkbox" required />
+        <input type="checkbox" name="is_adult" required />
         <span>
           I am 18 or older and agree to receive beta access emails. I can unsubscribe at any time.
         </span>
       </label>
-      <div className="turnstile-placeholder" aria-label="Abuse protection placeholder">
-        Protected by Turnstile when configured
-      </div>
+      {error && <p className="config-note" role="alert">{error}</p>}
       <Button size="large" type="submit" disabled={state === "submitting"}>
         {state === "submitting" ? (
           <>
