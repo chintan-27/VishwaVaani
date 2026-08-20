@@ -1,15 +1,16 @@
+import base64
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 import jwt
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, Request, UploadFile
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from vishwavaani_api import __version__
 from vishwavaani_api.auth import ensure_user, require_principal
 from vishwavaani_api.config import Settings, get_settings
+from vishwavaani_api.conversation import advance_mission_turn, build_messages, mission_system_prompt
 from vishwavaani_api.database import get_db
 from vishwavaani_api.email_service import send_sign_in_code
 from vishwavaani_api.errors import APIError, request_id
@@ -48,8 +49,9 @@ from vishwavaani_api.models import (
     User,
     WaitlistEntry,
 )
-from vishwavaani_api.provider import ProviderAdapter, validate_realtime_events
+from vishwavaani_api.provider import ProviderAdapter
 from vishwavaani_api.schemas import (
+    AudioTurnResponse,
     AuthCodeRequest,
     AuthCodeResponse,
     AuthPrincipal,
@@ -64,19 +66,17 @@ from vishwavaani_api.schemas import (
     HealthResponse,
     InviteClaimRequest,
     InviteClaimResponse,
+    MissionOpeningResponse,
     MissionSummary,
     PrivacyDeletionResponse,
     PrivacyExportResponse,
     ProfileUpdateRequest,
     ProgressResponse,
     ProviderConformanceResponse,
-    RealtimeOfferRequest,
-    RealtimeOfferResponse,
     RepairRequest,
     RepairResponse,
     SessionCreateRequest,
     SessionCreateResponse,
-    TurnEventRequest,
     WaitlistRequest,
     WaitlistResponse,
 )
@@ -497,7 +497,6 @@ async def create_session(
             Session.status.in_(
                 [
                     SessionStatus.CREATED,
-                    SessionStatus.CONNECTING,
                     SessionStatus.ACTIVE,
                     SessionStatus.RECONNECTING,
                 ]
@@ -544,7 +543,7 @@ async def create_session(
         prompt_version=PROMPT_VERSION,
         rubric_version=RUBRIC_VERSION,
         localization_version=LOCALIZATION_VERSION,
-        realtime_model=settings.ai_realtime_model or "disabled",
+        realtime_model=settings.ai_mission_model or "disabled",
         evaluator_model=settings.ai_evaluator_model or "disabled",
         caption_assisted=payload.caption_assisted,
         frozen_config={
@@ -575,7 +574,7 @@ async def create_session(
             "evaluator_model": session.evaluator_model,
             "transcription_model": settings.ai_transcription_model,
         },
-        offer_url=f"/v1/sessions/{session.id}/realtime/offers",
+        turn_url=f"/v1/sessions/{session.id}/turns",
     )
     remember(
         db,
@@ -591,97 +590,206 @@ async def create_session(
 
 
 @router.post(
-    "/sessions/{session_id}/realtime/offers",
-    response_model=RealtimeOfferResponse,
+    "/sessions/{session_id}/turns/start",
+    response_model=MissionOpeningResponse,
     tags=["sessions"],
 )
-async def exchange_realtime_offer(
+async def start_mission_turn(
     session_id: str,
-    payload: RealtimeOfferRequest,
     principal: AuthPrincipal = Depends(require_principal),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-) -> RealtimeOfferResponse:
+) -> MissionOpeningResponse:
+    """Get the agent's opening line. The one-time analogue of the old SDP handshake: the moment
+    the provider is first engaged for this session."""
     user = await ensure_user(principal, db)
     session = await owned_session(session_id, user.id, db)
     if session.status not in {SessionStatus.CREATED, SessionStatus.RECONNECTING}:
         raise APIError(
             code="invalid_session_transition",
-            message="This mission cannot accept a new connection offer.",
+            message="This mission has already begun.",
             status_code=409,
         )
-    session.status = SessionStatus.CONNECTING
-    await db.commit()
+    if not settings.live_missions_enabled:
+        raise APIError(
+            code="live_missions_disabled",
+            message="Live missions are temporarily unavailable. The scripted preview still works.",
+            status_code=503,
+        )
+
+    mission = MISSION_CATALOG[session.mission_slug]
+    required_slots = session.frozen_config["required_slots"]
+    system_prompt = mission_system_prompt(
+        mission_title=mission["title"],
+        mission_objective=mission["objective"],
+        required_slots=required_slots,
+    )
+    kickoff = [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": (
+                "(The learner has just approached. Begin the mission now with your first "
+                "short question.)"
+            ),
+        },
+    ]
 
     adapter = provider_for(settings)
     try:
-        answer, call_id = await adapter.exchange_sdp(
-            offer_sdp=payload.sdp,
-            instructions=(
-                "Follow the frozen mission graph. Never ask for real passport, booking, phone, "
-                "or address details. Call record_slot and complete_mission tools for state changes."
-            ),
-            tools=[
-                {"name": "record_slot"},
-                {"name": "record_repair"},
-                {"name": "complete_mission"},
-            ],
+        result = await advance_mission_turn(
+            adapter, required_slots=required_slots, messages=kickoff
         )
+        agent_audio = await adapter.synthesize(text=result.agent_text)
     finally:
         await adapter.close()
 
-    session.provider_call_id = call_id
+    agent_sequence = session.confirmed_sequence + 1
+    db.add(
+        SessionTurn(
+            session_id=session.id,
+            sequence=agent_sequence,
+            actor="agent",
+            transcript=result.agent_text,
+            slot_events=[{"slot": slot} for slot in result.recorded_slots],
+            started_at_ms=0,
+            ended_at_ms=0,
+        )
+    )
+    session.confirmed_sequence = agent_sequence
     session.status = SessionStatus.ACTIVE
     session.started_at = session.started_at or now()
     await db.commit()
-    return RealtimeOfferResponse(
-        answer_sdp=answer,
+
+    return MissionOpeningResponse(
         session_id=session.id,
         status=session.status,
+        agent_sequence=agent_sequence,
+        agent_transcript=result.agent_text,
+        agent_audio_base64=base64.b64encode(agent_audio).decode("ascii"),
     )
 
 
-@router.post("/sessions/{session_id}/turns", status_code=204, tags=["sessions"])
-async def record_turn(
+@router.post(
+    "/sessions/{session_id}/turns/audio",
+    response_model=AudioTurnResponse,
+    tags=["sessions"],
+)
+async def record_audio_turn(
     session_id: str,
-    payload: TurnEventRequest,
+    sequence: int = Form(..., ge=1),
+    started_at_ms: int = Form(0, ge=0),
+    ended_at_ms: int = Form(0, ge=0),
+    audio: UploadFile = File(...),
     principal: AuthPrincipal = Depends(require_principal),
     db: AsyncSession = Depends(get_db),
-) -> None:
+    settings: Settings = Depends(get_settings),
+) -> AudioTurnResponse:
     user = await ensure_user(principal, db)
     session = await owned_session(session_id, user.id, db)
-    if session.status not in {
-        SessionStatus.ACTIVE,
-        SessionStatus.RECONNECTING,
-    }:
+    if session.status not in {SessionStatus.ACTIVE, SessionStatus.RECONNECTING}:
         raise APIError(
             code="session_not_active",
             message="This mission is no longer accepting turns.",
             status_code=409,
         )
-    if payload.sequence <= session.confirmed_sequence:
-        return
-    if payload.sequence != session.confirmed_sequence + 1:
+    if sequence != session.confirmed_sequence + 1:
+        # ponytail: no replay tolerance for a response lost after a successful commit (the
+        # provider calls behind this endpoint are billed and non-idempotent). That failure mode
+        # is rare; if it shows up, add a replay lookup here instead of re-running the turn.
         raise APIError(
             code="event_sequence_gap",
             message="A session event is missing; reconnect before continuing.",
             status_code=409,
             retryable=True,
         )
+    if not settings.live_missions_enabled:
+        raise APIError(
+            code="live_missions_disabled",
+            message="Live missions are temporarily unavailable. The scripted preview still works.",
+            status_code=503,
+        )
+
+    audio_bytes = await audio.read()
+    mission = MISSION_CATALOG[session.mission_slug]
+    required_slots = session.frozen_config["required_slots"]
+    system_prompt = mission_system_prompt(
+        mission_title=mission["title"],
+        mission_objective=mission["objective"],
+        required_slots=required_slots,
+    )
+
+    adapter = provider_for(settings)
+    try:
+        learner_transcript = await adapter.transcribe(
+            audio_bytes=audio_bytes,
+            filename=audio.filename or "turn.webm",
+            content_type=audio.content_type or "audio/webm",
+        )
+
+        prior_turns = (
+            await db.scalars(
+                select(SessionTurn)
+                .where(SessionTurn.session_id == session.id)
+                .order_by(SessionTurn.sequence)
+            )
+        ).all()
+        messages = build_messages(system_prompt, prior_turns)
+        messages.append({"role": "user", "content": learner_transcript})
+
+        result = await advance_mission_turn(
+            adapter, required_slots=required_slots, messages=messages
+        )
+        agent_audio = await adapter.synthesize(text=result.agent_text)
+    finally:
+        await adapter.close()
+
     db.add(
         SessionTurn(
             session_id=session.id,
-            sequence=payload.sequence,
-            actor=payload.actor,
-            transcript=payload.transcript,
-            slot_events=payload.slot_events,
-            started_at_ms=payload.started_at_ms,
-            ended_at_ms=payload.ended_at_ms,
-            provider_event_id=payload.provider_event_id,
+            sequence=sequence,
+            actor="learner",
+            transcript=learner_transcript,
+            slot_events=[],
+            started_at_ms=started_at_ms,
+            ended_at_ms=ended_at_ms,
         )
     )
-    session.confirmed_sequence = payload.sequence
+    agent_sequence = sequence + 1
+    db.add(
+        SessionTurn(
+            session_id=session.id,
+            sequence=agent_sequence,
+            actor="agent",
+            transcript=result.agent_text,
+            slot_events=[{"slot": slot} for slot in result.recorded_slots],
+            started_at_ms=ended_at_ms,
+            ended_at_ms=ended_at_ms,
+        )
+    )
+    session.confirmed_sequence = agent_sequence
     await db.commit()
+
+    return AudioTurnResponse(
+        session_id=session.id,
+        status=session.status,
+        learner_sequence=sequence,
+        agent_sequence=agent_sequence,
+        learner_transcript=learner_transcript,
+        agent_transcript=result.agent_text,
+        agent_audio_base64=base64.b64encode(agent_audio).decode("ascii"),
+        slot_events=result.recorded_slots,
+        mission_complete=result.mission_complete,
+    )
+
+
+REPAIR_INSTRUCTIONS = {
+    "repeat": "Repeat your last question once, using the exact same meaning and wording style.",
+    "slower": "Repeat your last question more slowly, broken into short natural phrases.",
+    "meaning": (
+        "Briefly explain the meaning of your last question in simple English, then ask it again."
+    ),
+}
 
 
 @router.post(
@@ -694,6 +802,7 @@ async def record_repair(
     payload: RepairRequest,
     principal: AuthPrincipal = Depends(require_principal),
     db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> RepairResponse:
     user = await ensure_user(principal, db)
     session = await owned_session(session_id, user.id, db)
@@ -720,7 +829,45 @@ async def record_repair(
             )
         )
         await db.commit()
-    return RepairResponse(accepted=True, sequence=payload.sequence)
+
+    # "hint" is a UI-only reveal of the pre-written native-language phrase; only these three kinds
+    # need a fresh spoken line from the agent. This is not logged as a SessionTurn or counted in
+    # confirmed_sequence — repairs sit outside the learner/agent turn sequence, same as before.
+    instruction = REPAIR_INSTRUCTIONS.get(payload.kind)
+    if instruction is None or not settings.live_missions_enabled:
+        return RepairResponse(accepted=True, sequence=payload.sequence)
+
+    mission = MISSION_CATALOG[session.mission_slug]
+    required_slots = session.frozen_config["required_slots"]
+    system_prompt = mission_system_prompt(
+        mission_title=mission["title"],
+        mission_objective=mission["objective"],
+        required_slots=required_slots,
+    )
+    turns = (
+        await db.scalars(
+            select(SessionTurn)
+            .where(SessionTurn.session_id == session.id)
+            .order_by(SessionTurn.sequence)
+        )
+    ).all()
+    messages = build_messages(system_prompt, turns)
+    messages.append({"role": "user", "content": f"({instruction})"})
+
+    adapter = provider_for(settings)
+    try:
+        message = await adapter.mission_completion(messages=messages, tools=[])
+        agent_text = (message.get("content") or "").strip()
+        agent_audio = await adapter.synthesize(text=agent_text) if agent_text else b""
+    finally:
+        await adapter.close()
+
+    return RepairResponse(
+        accepted=True,
+        sequence=payload.sequence,
+        agent_transcript=agent_text or None,
+        agent_audio_base64=base64.b64encode(agent_audio).decode("ascii") if agent_text else None,
+    )
 
 
 @router.put(
@@ -736,7 +883,7 @@ async def update_caption_assistance(
 ) -> None:
     user = await ensure_user(principal, db)
     session = await owned_session(session_id, user.id, db)
-    if session.status not in {SessionStatus.CONNECTING, SessionStatus.ACTIVE}:
+    if session.status != SessionStatus.ACTIVE:
         raise APIError(
             code="session_not_active",
             message="Captions cannot be changed for this session now.",
@@ -869,7 +1016,8 @@ async def get_progress(
     readiness_by_mission: dict[str, Readiness] = {
         slug: Readiness.FIRST_ATTEMPT for slug in MISSION_CATALOG
     }
-    for evaluation in evaluated:
+    # `evaluated` is newest-first, so walk it backwards to let the latest attempt win.
+    for evaluation in reversed(evaluated):
         session = await db.get(Session, evaluation.session_id)
         if session and evaluation.readiness:
             readiness_by_mission[session.mission_slug] = evaluation.readiness
@@ -1103,15 +1251,15 @@ async def create_invitation(
     tags=["beta-admin"],
 )
 async def provider_conformance(
-    events: list[dict[str, Any]],
     settings: Settings = Depends(get_settings),
 ) -> ProviderConformanceResponse:
-    checks = {
-        "provider_configured": settings.provider_configured,
-        **validate_realtime_events(events),
-        "webrtc_sdp_exchange": False,
-        "server_side_control": False,
-    }
+    checks: dict[str, bool] = {"provider_configured": settings.provider_configured}
+    if settings.provider_configured:
+        adapter = provider_for(settings)
+        try:
+            checks.update(await adapter.conformance_probe())
+        finally:
+            await adapter.close()
     failures = [name for name, passed in checks.items() if not passed]
     return ProviderConformanceResponse(
         passed=not failures,

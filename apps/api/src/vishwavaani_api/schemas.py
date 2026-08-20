@@ -141,17 +141,27 @@ class SessionCreateResponse(BaseModel):
     status: SessionStatus
     expires_at: datetime
     frozen_versions: dict[str, str]
-    offer_url: str
+    turn_url: str
 
 
-class RealtimeOfferRequest(BaseModel):
-    sdp: str = Field(min_length=10, max_length=200_000)
-
-
-class RealtimeOfferResponse(BaseModel):
-    answer_sdp: str
+class MissionOpeningResponse(BaseModel):
     session_id: str
     status: SessionStatus
+    agent_sequence: int
+    agent_transcript: str
+    agent_audio_base64: str
+
+
+class AudioTurnResponse(BaseModel):
+    session_id: str
+    status: SessionStatus
+    learner_sequence: int
+    agent_sequence: int
+    learner_transcript: str
+    agent_transcript: str
+    agent_audio_base64: str
+    slot_events: list[str]
+    mission_complete: bool
 
 
 class RepairRequest(BaseModel):
@@ -162,28 +172,12 @@ class RepairRequest(BaseModel):
 class RepairResponse(BaseModel):
     accepted: bool
     sequence: int
+    agent_transcript: str | None = None
+    agent_audio_base64: str | None = None
 
 
 class CaptionAssistanceRequest(BaseModel):
     enabled: bool
-
-
-class TurnEventRequest(BaseModel):
-    sequence: int = Field(ge=1)
-    actor: Literal["agent", "learner"]
-    transcript: str = Field(max_length=10_000)
-    started_at_ms: int = Field(ge=0)
-    ended_at_ms: int = Field(ge=0)
-    provider_event_id: str | None = Field(default=None, max_length=128)
-    slot_events: list[dict[str, Any]] = Field(default_factory=list)
-
-    @field_validator("ended_at_ms")
-    @classmethod
-    def ends_after_start(cls, value: int, info: Any) -> int:
-        start = info.data.get("started_at_ms")
-        if start is not None and value < start:
-            raise ValueError("ended_at_ms must not precede started_at_ms")
-        return value
 
 
 class CompleteSessionRequest(BaseModel):

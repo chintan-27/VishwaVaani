@@ -10,7 +10,7 @@ import type { HintLocale, Mission, SessionMode } from "@/lib/types";
 export function MissionBriefing({ mission }: { mission: Mission }) {
   const [mode, setMode] = useState<SessionMode>("coach");
   const [locale, setLocale] = useState<HintLocale>("hi-IN");
-  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
+  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
   return (
     <div className="briefing-content">

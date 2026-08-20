@@ -26,11 +26,16 @@ class Settings(BaseSettings):
 
     ai_base_url: str | None = None
     ai_api_key: str | None = None
-    ai_realtime_model: str | None = None
+    # The chat model that drives the live mission conversation via tool-calling
+    # (record_slot / complete_mission). Not a WebRTC realtime voice model — turns are
+    # transcribed, sent here, then synthesized. See docs/architecture/system-architecture.md.
+    ai_mission_model: str | None = None
     ai_evaluator_model: str | None = None
     ai_transcription_model: str = "gpt-4o-mini-transcribe"
-    ai_realtime_calls_path: str = "/v1/realtime/calls"
-    ai_realtime_sideband_path: str = "/v1/realtime/calls/{call_id}/sideband"
+    ai_tts_model: str = "kokoro"
+    ai_tts_voice: str = "alloy"
+    ai_transcriptions_path: str = "/v1/audio/transcriptions"
+    ai_speech_path: str = "/v1/audio/speech"
     ai_chat_completions_path: str = "/v1/chat/completions"
     ai_connect_timeout_seconds: float = Field(default=8, gt=0, le=60)
     ai_read_timeout_seconds: float = Field(default=30, gt=0, le=180)
@@ -62,8 +67,10 @@ class Settings(BaseSettings):
             (
                 self.ai_base_url,
                 self.ai_api_key,
-                self.ai_realtime_model,
+                self.ai_mission_model,
                 self.ai_evaluator_model,
+                self.ai_transcription_model,
+                self.ai_tts_model,
             )
         )
 
@@ -85,7 +92,7 @@ class Settings(BaseSettings):
             "RESEND_API_KEY": self.resend_api_key,
             "AI_BASE_URL": self.ai_base_url,
             "AI_API_KEY": self.ai_api_key,
-            "AI_REALTIME_MODEL": self.ai_realtime_model,
+            "AI_MISSION_MODEL": self.ai_mission_model,
             "AI_EVALUATOR_MODEL": self.ai_evaluator_model,
             "ADMIN_API_KEY": self.admin_api_key,
         }

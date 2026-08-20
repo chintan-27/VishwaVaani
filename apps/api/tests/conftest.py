@@ -3,9 +3,12 @@ from collections.abc import Iterator
 
 os.environ["APP_ENV"] = "test"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:////private/tmp/vishwavaani-test.db"
+# Tests must be hermetic even when a developer's local apps/api/.env has real provider keys
+# (Settings' env_file loads it regardless of APP_ENV) — override every provider-facing value.
+os.environ["RESEND_API_KEY"] = ""
 os.environ["AI_BASE_URL"] = "https://provider.example"
 os.environ["AI_API_KEY"] = "test-key"
-os.environ["AI_REALTIME_MODEL"] = "realtime-test"
+os.environ["AI_MISSION_MODEL"] = "mission-test"
 os.environ["AI_EVALUATOR_MODEL"] = "evaluator-test"
 os.environ["ADMIN_API_KEY"] = "admin-test-key"
 

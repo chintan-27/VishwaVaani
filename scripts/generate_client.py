@@ -1,7 +1,10 @@
 import json
 from pathlib import Path
 
-schema_path = Path("packages/contracts/openapi.json")
+# Resolved relative to this file, not cwd: this script runs both from the repo root
+# (`pnpm api:openapi`) and from apps/web (`pnpm --filter @vishwavaani/web generate:client`).
+repo_root = Path(__file__).resolve().parent.parent
+schema_path = repo_root / "packages/contracts/openapi.json"
 schema = json.loads(schema_path.read_text(encoding="utf-8"))
 paths = schema.get("paths", {})
 
@@ -58,7 +61,7 @@ export type OperationId = keyof typeof operations;
 export type OperationDefinition = (typeof operations)[OperationId];
 """
 
-web_api_dir = Path("apps/web/src/lib/api")
+web_api_dir = repo_root / "apps/web/src/lib/api"
 web_api_dir.mkdir(parents=True, exist_ok=True)
 (web_api_dir / "schema.d.ts").write_text(types_output, encoding="utf-8")
 (web_api_dir / "generated-client.ts").write_text(client_output, encoding="utf-8")

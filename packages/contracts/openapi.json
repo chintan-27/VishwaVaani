@@ -607,13 +607,14 @@
         }
       }
     },
-    "/v1/sessions/{session_id}/realtime/offers": {
+    "/v1/sessions/{session_id}/turns/start": {
       "post": {
         "tags": [
           "sessions"
         ],
-        "summary": "Exchange Realtime Offer",
-        "operationId": "exchange_realtime_offer_v1_sessions__session_id__realtime_offers_post",
+        "summary": "Start Mission Turn",
+        "description": "Get the agent's opening line. The one-time analogue of the old SDP handshake: the moment\nthe provider is first engaged for this session.",
+        "operationId": "start_mission_turn_v1_sessions__session_id__turns_start_post",
         "parameters": [
           {
             "name": "session_id",
@@ -657,23 +658,13 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RealtimeOfferRequest"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RealtimeOfferResponse"
+                  "$ref": "#/components/schemas/MissionOpeningResponse"
                 }
               }
             }
@@ -691,13 +682,13 @@
         }
       }
     },
-    "/v1/sessions/{session_id}/turns": {
+    "/v1/sessions/{session_id}/turns/audio": {
       "post": {
         "tags": [
           "sessions"
         ],
-        "summary": "Record Turn",
-        "operationId": "record_turn_v1_sessions__session_id__turns_post",
+        "summary": "Record Audio Turn",
+        "operationId": "record_audio_turn_v1_sessions__session_id__turns_audio_post",
         "parameters": [
           {
             "name": "session_id",
@@ -744,16 +735,23 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/TurnEventRequest"
+                "$ref": "#/components/schemas/Body_record_audio_turn_v1_sessions__session_id__turns_audio_post"
               }
             }
           }
         },
         "responses": {
-          "204": {
-            "description": "Successful Response"
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioTurnResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -1418,21 +1416,6 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "additionalProperties": true
-                },
-                "title": "Events"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1460,6 +1443,61 @@
   },
   "components": {
     "schemas": {
+      "AudioTurnResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          },
+          "learner_sequence": {
+            "type": "integer",
+            "title": "Learner Sequence"
+          },
+          "agent_sequence": {
+            "type": "integer",
+            "title": "Agent Sequence"
+          },
+          "learner_transcript": {
+            "type": "string",
+            "title": "Learner Transcript"
+          },
+          "agent_transcript": {
+            "type": "string",
+            "title": "Agent Transcript"
+          },
+          "agent_audio_base64": {
+            "type": "string",
+            "title": "Agent Audio Base64"
+          },
+          "slot_events": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Slot Events"
+          },
+          "mission_complete": {
+            "type": "boolean",
+            "title": "Mission Complete"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "learner_sequence",
+          "agent_sequence",
+          "learner_transcript",
+          "agent_transcript",
+          "agent_audio_base64",
+          "slot_events",
+          "mission_complete"
+        ],
+        "title": "AudioTurnResponse"
+      },
       "AuthCodeRequest": {
         "properties": {
           "email": {
@@ -1540,6 +1578,38 @@
           "code"
         ],
         "title": "AuthVerifyRequest"
+      },
+      "Body_record_audio_turn_v1_sessions__session_id__turns_audio_post": {
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Sequence"
+          },
+          "started_at_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Started At Ms",
+            "default": 0
+          },
+          "ended_at_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Ended At Ms",
+            "default": 0
+          },
+          "audio": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Audio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence",
+          "audio"
+        ],
+        "title": "Body_record_audio_turn_v1_sessions__session_id__turns_audio_post"
       },
       "BootstrapResponse": {
         "properties": {
@@ -1888,6 +1958,38 @@
         ],
         "title": "InviteClaimResponse"
       },
+      "MissionOpeningResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          },
+          "agent_sequence": {
+            "type": "integer",
+            "title": "Agent Sequence"
+          },
+          "agent_transcript": {
+            "type": "string",
+            "title": "Agent Transcript"
+          },
+          "agent_audio_base64": {
+            "type": "string",
+            "title": "Agent Audio Base64"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "agent_sequence",
+          "agent_transcript",
+          "agent_audio_base64"
+        ],
+        "title": "MissionOpeningResponse"
+      },
       "MissionSummary": {
         "properties": {
           "slug": {
@@ -2095,43 +2197,6 @@
         ],
         "title": "Readiness"
       },
-      "RealtimeOfferRequest": {
-        "properties": {
-          "sdp": {
-            "type": "string",
-            "maxLength": 200000,
-            "minLength": 10,
-            "title": "Sdp"
-          }
-        },
-        "type": "object",
-        "required": [
-          "sdp"
-        ],
-        "title": "RealtimeOfferRequest"
-      },
-      "RealtimeOfferResponse": {
-        "properties": {
-          "answer_sdp": {
-            "type": "string",
-            "title": "Answer Sdp"
-          },
-          "session_id": {
-            "type": "string",
-            "title": "Session Id"
-          },
-          "status": {
-            "$ref": "#/components/schemas/SessionStatus"
-          }
-        },
-        "type": "object",
-        "required": [
-          "answer_sdp",
-          "session_id",
-          "status"
-        ],
-        "title": "RealtimeOfferResponse"
-      },
       "RepairRequest": {
         "properties": {
           "kind": {
@@ -2168,6 +2233,28 @@
           "sequence": {
             "type": "integer",
             "title": "Sequence"
+          },
+          "agent_transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Transcript"
+          },
+          "agent_audio_base64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Audio Base64"
           }
         },
         "type": "object",
@@ -2277,9 +2364,9 @@
             "type": "object",
             "title": "Frozen Versions"
           },
-          "offer_url": {
+          "turn_url": {
             "type": "string",
-            "title": "Offer Url"
+            "title": "Turn Url"
           }
         },
         "type": "object",
@@ -2288,7 +2375,7 @@
           "status",
           "expires_at",
           "frozen_versions",
-          "offer_url"
+          "turn_url"
         ],
         "title": "SessionCreateResponse"
       },
@@ -2314,67 +2401,6 @@
           "evaluated"
         ],
         "title": "SessionStatus"
-      },
-      "TurnEventRequest": {
-        "properties": {
-          "sequence": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Sequence"
-          },
-          "actor": {
-            "type": "string",
-            "enum": [
-              "agent",
-              "learner"
-            ],
-            "title": "Actor"
-          },
-          "transcript": {
-            "type": "string",
-            "maxLength": 10000,
-            "title": "Transcript"
-          },
-          "started_at_ms": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Started At Ms"
-          },
-          "ended_at_ms": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Ended At Ms"
-          },
-          "provider_event_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 128
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Provider Event Id"
-          },
-          "slot_events": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Slot Events"
-          }
-        },
-        "type": "object",
-        "required": [
-          "sequence",
-          "actor",
-          "transcript",
-          "started_at_ms",
-          "ended_at_ms"
-        ],
-        "title": "TurnEventRequest"
       },
       "ValidationError": {
         "properties": {

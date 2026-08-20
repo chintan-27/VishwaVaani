@@ -64,25 +64,55 @@ const script = [
 
 interface CreatedSession {
   session_id: string;
-  offer_url: string;
+  turn_url: string;
   frozen_versions: Record<string, string>;
 }
 
-interface RealtimeAnswer {
-  answer_sdp: string;
+interface MissionOpening {
+  agent_sequence: number;
+  agent_transcript: string;
+  agent_audio_base64: string;
 }
 
-function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
-  if (peer.iceGatheringState === "complete") return Promise.resolve();
+interface AudioTurnResult {
+  agent_sequence: number;
+  agent_transcript: string;
+  agent_audio_base64: string;
+  slot_events: string[];
+  mission_complete: boolean;
+}
+
+interface RepairResult {
+  agent_transcript: string | null;
+  agent_audio_base64: string | null;
+}
+
+/** Voice-activity thresholds for hands-free auto-record: the mic meter (see audio-preview.tsx for
+ * the same technique) never reads below ~0.08 at rest, so 0.16 is comfortably above room noise. */
+const VAD_START_LEVEL = 0.16;
+const VAD_STOP_LEVEL = 0.11;
+const VAD_SILENCE_HANGOVER_MS = 900;
+
+function playBase64Audio(base64: string, mimeType = "audio/mpeg"): Promise<void> {
+  const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+  const audio = new Audio(url);
   return new Promise((resolve) => {
-    const onStateChange = () => {
-      if (peer.iceGatheringState === "complete") {
-        peer.removeEventListener("icegatheringstatechange", onStateChange);
-        resolve();
-      }
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      resolve();
     };
-    peer.addEventListener("icegatheringstatechange", onStateChange);
+    audio.addEventListener("ended", cleanup, { once: true });
+    audio.addEventListener("error", cleanup, { once: true });
+    void audio.play().catch(cleanup);
   });
+}
+
+function pickRecorderMimeType(): string | undefined {
+  if (typeof window === "undefined" || !window.MediaRecorder) return undefined;
+  return ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"].find(
+    (type) => window.MediaRecorder.isTypeSupported?.(type),
+  );
 }
 
 export function VoiceSession({
@@ -103,15 +133,28 @@ export function VoiceSession({
   const [exitOpen, setExitOpen] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [liveTranscript, setLiveTranscript] = useState("Starting your conversation…");
+  const [micLevel, setMicLevel] = useState(0.18);
   const sessionIdRef = useRef<string | null>(null);
-  const dataChannelRef = useRef<RTCDataChannel | null>(null);
-  const audioTrackRef = useRef<MediaStreamTrack | null>(null);
   const turnSequenceRef = useRef(0);
   const repairSequenceRef = useRef(0);
-  const turnQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const startRecordingRef = useRef<(() => void) | null>(null);
+  const stopRecordingRef = useRef<(() => void) | null>(null);
   const state = snapshot.value as VoiceState;
   const realWorld = mode === "real_world";
-  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
+  // Fail closed: a missing/misconfigured build-time env var must land on the real product,
+  // not silently swap live users onto the scripted tour.
+  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
+  // Imperative loops below (the mic meter / VAD) live for the whole session and cannot pick up
+  // fresh `state`/`muted` from a closure without re-running the whole effect, so mirror them here.
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+  const mutedRef = useRef(muted);
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
 
   useEffect(() => {
     if (!isDemoMode) return;
@@ -145,40 +188,26 @@ export function VoiceSession({
   useEffect(() => {
     if (isDemoMode) return;
     let disposed = false;
-    let peer: RTCPeerConnection | null = null;
-    let microphone: MediaStream | null = null;
-    let remoteAudio: HTMLAudioElement | null = null;
+    let micStream: MediaStream | null = null;
+    let audioContext: AudioContext | null = null;
+    let analyser: AnalyserNode | null = null;
+    let analyserData: Uint8Array<ArrayBuffer> | null = null;
+    let recorder: MediaRecorder | null = null;
+    let recordedChunks: BlobPart[] = [];
+    let recordingStartedAt = 0;
+    let silenceStartedAt: number | null = null;
+    let meterFrame: number | null = null;
+    const coveredSlots = new Set<string>();
 
-    const recordTurn = (
-      actor: "agent" | "learner",
-      transcript: string,
-      providerEventId?: string,
-      slotEvents: { slot: string }[] = [],
-    ) => {
-      const sessionId = sessionIdRef.current;
-      if (!sessionId) return;
-      const sequence = ++turnSequenceRef.current;
-      turnQueueRef.current = turnQueueRef.current.then(() =>
-        apiRequest(`/sessions/${sessionId}/turns`, {
-          method: "POST",
-          body: JSON.stringify({
-            sequence,
-            actor,
-            transcript,
-            started_at_ms: 0,
-            ended_at_ms: 0,
-            provider_event_id: providerEventId,
-            slot_events: slotEvents,
-          }),
-        }),
-      );
+    const applySlotEvents = (slots: string[]) => {
+      for (const slot of slots) coveredSlots.add(slot);
+      setTurn(Math.min(coveredSlots.size, mission.requiredSlots.length - 1));
     };
 
-    const complete = async () => {
+    const finishSession = async () => {
       const sessionId = sessionIdRef.current;
       if (!sessionId) return;
       try {
-        await turnQueueRef.current;
         await apiRequest(`/sessions/${sessionId}/complete`, {
           method: "POST",
           idempotencyKey: crypto.randomUUID(),
@@ -192,71 +221,99 @@ export function VoiceSession({
       }
     };
 
-    const handleProviderEvent = (rawEvent: MessageEvent<string>) => {
-      let event: Record<string, unknown>;
+    const submitAudioTurn = async (blob: Blob, endedAtMs: number) => {
+      const sessionId = sessionIdRef.current;
+      if (!sessionId) return;
+      const form = new FormData();
+      form.set("sequence", String(turnSequenceRef.current + 1));
+      form.set("started_at_ms", "0");
+      form.set("ended_at_ms", String(Math.max(0, endedAtMs)));
+      form.set("audio", blob, "turn.webm");
       try {
-        event = JSON.parse(rawEvent.data) as Record<string, unknown>;
-      } catch {
-        return;
-      }
-      const type = typeof event.type === "string" ? event.type : "";
-      const eventId = typeof event.event_id === "string" ? event.event_id : undefined;
-
-      if (type === "response.created") {
-        setLiveTranscript("");
+        const result = await apiRequest<AudioTurnResult>(`/sessions/${sessionId}/turns/audio`, {
+          method: "POST",
+          body: form,
+        });
+        if (disposed) return;
+        turnSequenceRef.current = result.agent_sequence;
+        applySlotEvents(result.slot_events);
         send({ type: "RESPONSE_READY" });
-      }
-      if (type === "input_audio_buffer.speech_started") send({ type: "START_TALK" });
-      if (type === "input_audio_buffer.speech_stopped") send({ type: "STOP_TALK" });
-      if (type === "response.output_audio_transcript.delta" || type === "response.audio_transcript.delta") {
-        const delta = typeof event.delta === "string" ? event.delta : "";
-        setLiveTranscript((current) => current === "Starting your conversation…" ? delta : current + delta);
-      }
-      if (type === "response.output_audio_transcript.done" || type === "response.audio_transcript.done") {
-        const transcript = typeof event.transcript === "string" ? event.transcript : "";
-        if (transcript) {
-          setLiveTranscript(transcript);
-          recordTurn("agent", transcript, eventId);
+        setLiveTranscript(result.agent_transcript);
+        await playBase64Audio(result.agent_audio_base64);
+        if (disposed) return;
+        if (result.mission_complete) {
+          await finishSession();
+        } else {
+          send({ type: "AGENT_DONE" });
         }
+      } catch (requestError) {
+        if (disposed) return;
+        setLiveError(requestError instanceof Error ? requestError.message : "Could not send that turn.");
+        send({ type: "FAIL" });
       }
-      if (type === "conversation.item.input_audio_transcription.completed") {
-        const transcript = typeof event.transcript === "string" ? event.transcript : "";
-        if (transcript) recordTurn("learner", transcript, eventId);
-      }
-      if (type === "response.done") send({ type: "AGENT_DONE" });
-      if (type === "response.function_call_arguments.done") {
-        const name = typeof event.name === "string" ? event.name : "";
-        const args = (() => {
-          try {
-            return typeof event.arguments === "string"
-              ? JSON.parse(event.arguments) as Record<string, unknown>
-              : {};
-          } catch {
-            return {};
+    };
+
+    const stopRecording = () => {
+      if (!recorder || recorder.state === "inactive") return;
+      const activeRecorder = recorder;
+      const endedAtMs = Date.now() - recordingStartedAt;
+      recorder = null;
+      send({ type: "STOP_TALK" });
+      activeRecorder.addEventListener(
+        "stop",
+        () => {
+          const blob = new Blob(recordedChunks, { type: activeRecorder.mimeType || "audio/webm" });
+          recordedChunks = [];
+          void submitAudioTurn(blob, endedAtMs);
+        },
+        { once: true },
+      );
+      activeRecorder.stop();
+    };
+
+    const startRecording = () => {
+      if (!micStream || recorder) return;
+      recordedChunks = [];
+      recordingStartedAt = Date.now();
+      const mimeType = pickRecorderMimeType();
+      const nextRecorder = new MediaRecorder(micStream, mimeType ? { mimeType } : undefined);
+      nextRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordedChunks.push(event.data);
+      };
+      recorder = nextRecorder;
+      nextRecorder.start();
+      send({ type: "START_TALK" });
+    };
+
+    startRecordingRef.current = startRecording;
+    stopRecordingRef.current = stopRecording;
+
+    const meter = () => {
+      if (analyser && analyserData) {
+        analyser.getByteFrequencyData(analyserData);
+        const average =
+          analyserData.reduce((total, value) => total + value, 0) / analyserData.length / 255;
+        setMicLevel(Math.max(0.08, average));
+
+        // Hands-free auto-record: start on a burst of energy, stop after a sustained quiet
+        // stretch. Coach mode ignores this entirely and uses the push-to-talk handlers instead.
+        if (realWorld && !mutedRef.current) {
+          if (stateRef.current === "ready" && average > VAD_START_LEVEL) {
+            startRecording();
+          } else if (stateRef.current === "recording") {
+            if (average < VAD_STOP_LEVEL) {
+              silenceStartedAt ??= performance.now();
+              if (performance.now() - silenceStartedAt > VAD_SILENCE_HANGOVER_MS) {
+                silenceStartedAt = null;
+                stopRecording();
+              }
+            } else {
+              silenceStartedAt = null;
+            }
           }
-        })();
-        if (name === "record_slot" && typeof args.slot === "string") {
-          recordTurn("agent", "", eventId, [{ slot: args.slot }]);
         }
-        const callId = typeof event.call_id === "string" ? event.call_id : undefined;
-        if (callId && dataChannelRef.current?.readyState === "open") {
-          dataChannelRef.current.send(JSON.stringify({
-            type: "conversation.item.create",
-            item: {
-              type: "function_call_output",
-              call_id: callId,
-              output: JSON.stringify({ accepted: true }),
-            },
-          }));
-          if (name !== "complete_mission") {
-            dataChannelRef.current.send(JSON.stringify({ type: "response.create" }));
-          }
-        }
-        if (name === "complete_mission") void complete();
       }
-      if (type === "error") {
-        setLiveError("The AI voice service reported an error. Please end this attempt and retry.");
-      }
+      meterFrame = requestAnimationFrame(meter);
     };
 
     const start = async () => {
@@ -274,48 +331,28 @@ export function VoiceSession({
         if (disposed) return;
         sessionIdRef.current = created.session_id;
 
-        microphone = await navigator.mediaDevices.getUserMedia({ audio: true });
-        peer = new RTCPeerConnection();
-        remoteAudio = document.createElement("audio");
-        remoteAudio.autoplay = true;
-        peer.ontrack = (event) => {
-          if (remoteAudio) remoteAudio.srcObject = event.streams[0];
-        };
-        const track = microphone.getAudioTracks()[0];
-        track.enabled = realWorld;
-        audioTrackRef.current = track;
-        peer.addTrack(track, microphone);
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (disposed) {
+          micStream.getTracks().forEach((track) => track.stop());
+          return;
+        }
 
-        const channel = peer.createDataChannel("oai-events");
-        dataChannelRef.current = channel;
-        channel.onmessage = handleProviderEvent;
-        channel.onopen = () => {
-          if (disposed) return;
-          send({ type: "CONNECTED" });
-          channel.send(JSON.stringify({
-            type: "session.update",
-            session: {
-              instructions: `You are the conversation partner for ${mission.title}. Objective: ${mission.objective} Ask one short question at a time. Never request real personal or document details. The required slots are ${mission.requiredSlots.join(", ")}. Call record_slot after each required detail is understood. Call complete_mission when all required slots are covered.`,
-              tools: [
-                { type: "function", name: "record_slot", description: "Record one required mission detail", parameters: { type: "object", properties: { slot: { type: "string", enum: mission.requiredSlots } }, required: ["slot"], additionalProperties: false } },
-                { type: "function", name: "complete_mission", description: "Finish after every required detail is understood", parameters: { type: "object", properties: {}, additionalProperties: false } },
-              ],
-              tool_choice: "auto",
-              turn_detection: realWorld ? { type: "server_vad", create_response: true } : null,
-              input_audio_transcription: { model: created.frozen_versions.transcription_model },
-            },
-          }));
-          channel.send(JSON.stringify({ type: "response.create" }));
-        };
+        audioContext = new AudioContext();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 64;
+        audioContext.createMediaStreamSource(micStream).connect(analyser);
+        analyserData = new Uint8Array(analyser.frequencyBinCount);
+        meter();
 
-        const offer = await peer.createOffer();
-        await peer.setLocalDescription(offer);
-        await waitForIceGathering(peer);
-        const answer = await apiRequest<RealtimeAnswer>(created.offer_url.replace("/v1", ""), {
-          method: "POST",
-          body: JSON.stringify({ sdp: peer.localDescription?.sdp ?? offer.sdp }),
-        });
-        await peer.setRemoteDescription({ type: "answer", sdp: answer.answer_sdp });
+        const turnBase = created.turn_url.replace("/v1", "");
+        const opening = await apiRequest<MissionOpening>(`${turnBase}/start`, { method: "POST" });
+        if (disposed) return;
+        turnSequenceRef.current = opening.agent_sequence;
+        send({ type: "CONNECTED" });
+        setLiveTranscript(opening.agent_transcript);
+        await playBase64Audio(opening.agent_audio_base64);
+        if (disposed) return;
+        send({ type: "AGENT_DONE" });
       } catch (requestError) {
         if (disposed) return;
         setLiveError(requestError instanceof Error ? requestError.message : "Could not start the live mission.");
@@ -326,12 +363,12 @@ export function VoiceSession({
     void start();
     return () => {
       disposed = true;
-      dataChannelRef.current?.close();
-      peer?.close();
-      microphone?.getTracks().forEach((track) => track.stop());
-      if (remoteAudio) remoteAudio.srcObject = null;
-      dataChannelRef.current = null;
-      audioTrackRef.current = null;
+      startRecordingRef.current = null;
+      stopRecordingRef.current = null;
+      if (meterFrame) cancelAnimationFrame(meterFrame);
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+      void audioContext?.close();
+      micStream?.getTracks().forEach((track) => track.stop());
     };
   }, [isDemoMode, locale, mission, mode, realWorld, router, send]);
 
@@ -343,50 +380,41 @@ export function VoiceSession({
   );
 
   const talkStart = () => {
-    if (state === "ready") {
-      if (!isDemoMode && audioTrackRef.current) audioTrackRef.current.enabled = true;
+    if (state !== "ready") return;
+    if (isDemoMode) {
       send({ type: "START_TALK" });
+      return;
     }
+    startRecordingRef.current?.();
   };
   const talkStop = () => {
-    if (state === "recording") {
-      if (!isDemoMode && audioTrackRef.current) {
-        audioTrackRef.current.enabled = false;
-        if (dataChannelRef.current?.readyState === "open") {
-          dataChannelRef.current.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
-          dataChannelRef.current.send(JSON.stringify({ type: "response.create" }));
-        }
-      }
+    if (state !== "recording") return;
+    if (isDemoMode) {
       send({ type: "STOP_TALK" });
+      return;
     }
+    stopRecordingRef.current?.();
   };
 
-  const requestRepair = (kind: "repeat" | "slower" | "meaning" | "hint", instruction?: string) => {
+  const requestRepair = (kind: "repeat" | "slower" | "meaning" | "hint") => {
     const sessionId = sessionIdRef.current;
-    if (!isDemoMode && sessionId) {
-      repairSequenceRef.current += 1;
-      void apiRequest(`/sessions/${sessionId}/repairs`, {
-        method: "POST",
-        body: JSON.stringify({ kind, sequence: repairSequenceRef.current }),
-      }).catch((requestError) => {
+    if (isDemoMode || !sessionId) return;
+    repairSequenceRef.current += 1;
+    apiRequest<RepairResult>(`/sessions/${sessionId}/repairs`, {
+      method: "POST",
+      body: JSON.stringify({ kind, sequence: repairSequenceRef.current }),
+    })
+      .then((result) => {
+        if (!result.agent_audio_base64) return;
+        setLiveTranscript(result.agent_transcript ?? "");
+        void playBase64Audio(result.agent_audio_base64);
+      })
+      .catch((requestError) => {
         setLiveError(requestError instanceof Error ? requestError.message : "Could not request help.");
       });
-      if (instruction && dataChannelRef.current?.readyState === "open") {
-        dataChannelRef.current.send(JSON.stringify({
-          type: "response.create",
-          response: { instructions: instruction },
-        }));
-      }
-    }
   };
 
-  const toggleMute = () => {
-    const nextMuted = !muted;
-    setMuted(nextMuted);
-    if (!isDemoMode && audioTrackRef.current) {
-      audioTrackRef.current.enabled = !nextMuted && state !== "paused";
-    }
-  };
+  const toggleMute = () => setMuted((current) => !current);
 
   const toggleCaptions = () => {
     const nextCaptionAssisted = !captionAssisted;
@@ -404,25 +432,20 @@ export function VoiceSession({
   };
 
   const togglePause = () => {
-    const resuming = state === "paused";
-    if (!isDemoMode && audioTrackRef.current) {
-      audioTrackRef.current.enabled = resuming && realWorld && !muted;
-    }
-    send({ type: resuming ? "RESUME" : "PAUSE" });
+    send({ type: state === "paused" ? "RESUME" : "PAUSE" });
   };
 
   const endWithoutScoring = async () => {
     const sessionId = sessionIdRef.current;
     if (!isDemoMode && sessionId) {
       try {
-        await turnQueueRef.current;
         await apiRequest(`/sessions/${sessionId}/complete`, {
           method: "POST",
           idempotencyKey: crypto.randomUUID(),
           body: JSON.stringify({ final_sequence: turnSequenceRef.current, reason: "user_exit" }),
         });
       } catch {
-        // Navigating away still closes the browser media connection.
+        // Navigating away still tears down the microphone via the effect cleanup.
       }
     }
     router.push(`/app/missions/${mission.slug}`);
@@ -441,9 +464,12 @@ export function VoiceSession({
             {isDemoMode ? "No microphone audio processed" : "No audio stored"}
           </div>
         </div>
-        <div className="session-progress" aria-label={`Turn ${turn + 1} of 4`}>
-          {[0, 1, 2, 3].map((index) => (
-            <i className={index <= turn ? "active" : ""} key={index} />
+        <div
+          className="session-progress"
+          aria-label={`Step ${turn + 1} of ${mission.requiredSlots.length}`}
+        >
+          {mission.requiredSlots.map((slot, index) => (
+            <i className={index <= turn ? "active" : ""} key={slot} />
           ))}
         </div>
         <Button size="icon" variant="ghost" aria-label="Exit mission" onClick={() => setExitOpen(true)}>
@@ -471,7 +497,10 @@ export function VoiceSession({
 
         {liveError && <p className="config-note" role="alert">{liveError}</p>}
 
-        <AudioOrb state={state} level={state === "recording" ? 0.68 : 0.18} />
+        <AudioOrb
+          state={state}
+          level={state === "recording" ? (isDemoMode ? 0.68 : micLevel) : 0.18}
+        />
 
         {!realWorld && hintOpen && (
           <div className="native-hint" lang={locale.split("-")[0]}>
@@ -487,15 +516,15 @@ export function VoiceSession({
 
       <footer className="session-controls">
         <div className="repair-controls">
-          <Button variant="ghost" onClick={() => requestRepair("repeat", "Repeat your last question once, using the same meaning.")}>
+          <Button variant="ghost" onClick={() => requestRepair("repeat")}>
             <RotateCcw aria-hidden="true" /> Repeat
           </Button>
-          <Button variant="ghost" onClick={() => requestRepair("slower", "Repeat your last question more slowly, in short natural phrases.")}>
+          <Button variant="ghost" onClick={() => requestRepair("slower")}>
             <Gauge aria-hidden="true" /> Slower
           </Button>
           {!realWorld && (
             <>
-              <Button variant="ghost" title={repairPhrases.meaning.hints[locale]} onClick={() => requestRepair("meaning", "Explain the meaning of your last question in simple English, then ask it again.")}>
+              <Button variant="ghost" title={repairPhrases.meaning.hints[locale]} onClick={() => requestRepair("meaning")}>
                 <Accessibility aria-hidden="true" /> Meaning
               </Button>
               <Button variant="ghost" onClick={() => { setHintOpen((open) => !open); requestRepair("hint"); }}>

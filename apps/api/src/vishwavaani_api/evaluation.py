@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from vishwavaani_api.config import get_settings
 from vishwavaani_api.database import SessionFactory
@@ -109,7 +109,22 @@ async def evaluate_session_async(session_id: str) -> None:
         evaluation.strengths = semantic.strengths
         evaluation.main_obstacle = semantic.main_obstacle
         evaluation.next_action = semantic.next_action
-        evaluation.readiness = readiness_from_scores(scores, previous_valid_attempts=0)
+        previous_valid_attempts = (
+            await db.scalar(
+                select(func.count(Evaluation.id))
+                .join(Session, Session.id == Evaluation.session_id)
+                .where(
+                    Session.user_id == session.user_id,
+                    Session.mission_slug == session.mission_slug,
+                    Session.id != session.id,
+                    Evaluation.status == "evaluated",
+                )
+            )
+            or 0
+        )
+        evaluation.readiness = readiness_from_scores(
+            scores, previous_valid_attempts=previous_valid_attempts
+        )
         evaluation.status = "evaluated"
         session.status = SessionStatus.EVALUATED
         await db.commit()

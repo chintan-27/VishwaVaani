@@ -13,6 +13,7 @@ dependencies = [
   "psycopg[binary]>=3.2",
   "pydantic-settings>=2.10",
   "pyjwt[crypto]>=2.10",
+  "python-multipart>=0.0.20",
   "sqlalchemy[asyncio]>=2.0",
   "uvicorn[standard]>=0.35",
 ]
@@ -48,4 +49,3 @@ ignore = ["B008"]
 
 [tool.ruff.lint.per-file-ignores]
 "apps/api/alembic/versions/*.py" = ["E501", "I001", "UP007", "UP035"]
-"scripts/provider_conformance.py" = ["ASYNC240"]

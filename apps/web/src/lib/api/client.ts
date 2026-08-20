@@ -44,7 +44,9 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
-  if (init?.body) headers.set("Content-Type", "application/json");
+  // Leave FormData bodies alone: fetch sets the multipart Content-Type (with boundary) itself,
+  // and overriding it here would drop the boundary and break the server's multipart parser.
+  if (init?.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   if (init?.idempotencyKey) headers.set("Idempotency-Key", init.idempotencyKey);
   const accessToken = getAccessToken();
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);

@@ -20,9 +20,9 @@ export const operations = {
   "update_caption_assistance_v1_sessions__session_id__caption_assistance_put": { method: "PUT", path: "/v1/sessions/{session_id}/caption-assistance" },
   "complete_session_v1_sessions__session_id__complete_post": { method: "POST", path: "/v1/sessions/{session_id}/complete" },
   "get_evaluation_v1_sessions__session_id__evaluation_get": { method: "GET", path: "/v1/sessions/{session_id}/evaluation" },
-  "exchange_realtime_offer_v1_sessions__session_id__realtime_offers_post": { method: "POST", path: "/v1/sessions/{session_id}/realtime/offers" },
   "record_repair_v1_sessions__session_id__repairs_post": { method: "POST", path: "/v1/sessions/{session_id}/repairs" },
-  "record_turn_v1_sessions__session_id__turns_post": { method: "POST", path: "/v1/sessions/{session_id}/turns" },
+  "record_audio_turn_v1_sessions__session_id__turns_audio_post": { method: "POST", path: "/v1/sessions/{session_id}/turns/audio" },
+  "start_mission_turn_v1_sessions__session_id__turns_start_post": { method: "POST", path: "/v1/sessions/{session_id}/turns/start" },
   "join_waitlist_v1_waitlist_post": { method: "POST", path: "/v1/waitlist" },
 } as const;
 

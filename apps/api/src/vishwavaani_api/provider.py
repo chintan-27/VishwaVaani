@@ -1,6 +1,5 @@
 import asyncio
 import json
-from collections.abc import Iterable
 from typing import Any
 
 import httpx
@@ -10,18 +9,14 @@ from vishwavaani_api.config import Settings, get_settings
 from vishwavaani_api.errors import APIError
 from vishwavaani_api.schemas import SemanticEvaluation
 
-REQUIRED_REALTIME_EVENT_TYPES = {
-    "session.created",
-    "session.updated",
-    "input_audio_buffer.speech_started",
-    "input_audio_buffer.speech_stopped",
-    "response.output_audio.delta",
-    "response.function_call_arguments.done",
-}
-
 
 class ProviderAdapter:
-    """Provider-neutral adapter for OpenAI-compatible Realtime and Chat Completions."""
+    """Provider-neutral adapter for an OpenAI-compatible chat/audio API.
+
+    Live missions are turn-based, not a persistent realtime connection: the browser records a
+    clip, this adapter transcribes it, drives the mission conversation through tool-calling chat
+    completions, then synthesizes the reply. FastAPI still never stores raw audio.
+    """
 
     def __init__(
         self,
@@ -62,26 +57,15 @@ class ProviderAdapter:
             )
         return {"Authorization": f"Bearer {self.settings.ai_api_key}"}
 
-    async def exchange_sdp(
-        self,
-        *,
-        offer_sdp: str,
-        instructions: str,
-        tools: list[dict[str, Any]],
-    ) -> tuple[str, str | None]:
+    async def transcribe(self, *, audio_bytes: bytes, filename: str, content_type: str) -> str:
+        """Speech-to-text for one learner turn."""
         async with self._semaphore:
-            headers = {
-                **self._headers(),
-                "Content-Type": "application/sdp",
-                "X-VishwaVaani-Instructions": instructions,
-                "X-VishwaVaani-Tools": ",".join(str(tool.get("name", "")) for tool in tools),
-            }
             try:
                 response = await self._client.post(
-                    self._url(self.settings.ai_realtime_calls_path),
-                    params={"model": self.settings.ai_realtime_model},
-                    headers=headers,
-                    content=offer_sdp.encode("utf-8"),
+                    self._url(self.settings.ai_transcriptions_path),
+                    headers=self._headers(),
+                    data={"model": self.settings.ai_transcription_model},
+                    files={"file": (filename, audio_bytes, content_type)},
                 )
                 response.raise_for_status()
             except (httpx.TimeoutException, httpx.NetworkError) as exc:
@@ -94,34 +78,104 @@ class ProviderAdapter:
                 ) from exc
             except httpx.HTTPStatusError as exc:
                 raise APIError(
-                    code="provider_rejected_offer",
-                    message="The live voice service could not start this mission.",
+                    code="provider_transcription_failed",
+                    message="We could not hear that clearly. Please try again.",
                     status_code=502,
                     retryable=exc.response.status_code >= 500,
                 ) from exc
 
-            answer = response.text
-            if "v=0" not in answer or "m=audio" not in answer:
+            text = response.json().get("text")
+            if not isinstance(text, str):
                 raise APIError(
-                    code="provider_invalid_sdp",
-                    message="The live voice service returned an invalid connection response.",
+                    code="provider_transcription_failed",
+                    message="We could not hear that clearly. Please try again.",
                     status_code=502,
+                    retryable=True,
+                    retry_after_seconds=2,
                 )
-            call_id = response.headers.get("OpenAI-Call-Id") or response.headers.get("X-Call-Id")
-            return answer, call_id
+            return text
 
-    async def send_sideband_control(self, *, call_id: str, event: dict[str, Any]) -> bool:
-        path = self.settings.ai_realtime_sideband_path.format(call_id=call_id)
-        try:
-            response = await self._client.post(
-                self._url(path),
-                headers={**self._headers(), "Content-Type": "application/json"},
-                json=event,
-            )
-            response.raise_for_status()
-            return True
-        except httpx.HTTPError:
-            return False
+    async def mission_completion(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """One chat-completion step of the mission conversation. Returns the raw assistant message
+        (content and/or tool_calls); the tool-calling loop lives in conversation.py."""
+        payload: dict[str, Any] = {
+            "model": self.settings.ai_mission_model,
+            "temperature": 0.4,
+            "messages": messages,
+        }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        async with self._semaphore:
+            try:
+                response = await self._client.post(
+                    self._url(self.settings.ai_chat_completions_path),
+                    headers={**self._headers(), "Content-Type": "application/json"},
+                    json=payload,
+                )
+                response.raise_for_status()
+            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                raise APIError(
+                    code="provider_timeout",
+                    message="The live voice service did not respond in time.",
+                    status_code=504,
+                    retryable=True,
+                    retry_after_seconds=5,
+                ) from exc
+            except httpx.HTTPStatusError as exc:
+                raise APIError(
+                    code="provider_rejected_turn",
+                    message="The live voice service could not continue this mission.",
+                    status_code=502,
+                    retryable=exc.response.status_code >= 500,
+                ) from exc
+
+            try:
+                return response.json()["choices"][0]["message"]
+            except (KeyError, IndexError, ValueError) as exc:
+                raise APIError(
+                    code="provider_rejected_turn",
+                    message="The live voice service could not continue this mission.",
+                    status_code=502,
+                    retryable=True,
+                    retry_after_seconds=2,
+                ) from exc
+
+    async def synthesize(self, *, text: str) -> bytes:
+        """Text-to-speech for one agent reply. Returns raw audio bytes (provider-chosen format)."""
+        async with self._semaphore:
+            try:
+                response = await self._client.post(
+                    self._url(self.settings.ai_speech_path),
+                    headers={**self._headers(), "Content-Type": "application/json"},
+                    json={
+                        "model": self.settings.ai_tts_model,
+                        "voice": self.settings.ai_tts_voice,
+                        "input": text,
+                    },
+                )
+                response.raise_for_status()
+            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                raise APIError(
+                    code="provider_timeout",
+                    message="The live voice service did not respond in time.",
+                    status_code=504,
+                    retryable=True,
+                    retry_after_seconds=5,
+                ) from exc
+            except httpx.HTTPStatusError as exc:
+                raise APIError(
+                    code="provider_speech_failed",
+                    message="The live voice service could not speak its reply.",
+                    status_code=502,
+                    retryable=exc.response.status_code >= 500,
+                ) from exc
+            return response.content
 
     async def evaluate(
         self,
@@ -192,23 +246,43 @@ class ProviderAdapter:
                     retry_after_seconds=5,
                 ) from exc
 
+    async def conformance_probe(self) -> dict[str, bool]:
+        """Best-effort end-to-end check of each provider leg (speech out, speech in, tool-calling),
+        used by the admin conformance endpoint and scripts/provider_conformance.py."""
+        checks = {"speech_synthesis": False, "speech_transcription": False, "tool_calls": False}
+        try:
+            audio = await self.synthesize(text="Conformance check.")
+            checks["speech_synthesis"] = bool(audio)
+        except APIError:
+            return checks
+
+        try:
+            transcript = await self.transcribe(
+                audio_bytes=audio, filename="probe.mp3", content_type="audio/mpeg"
+            )
+            checks["speech_transcription"] = bool(transcript.strip())
+        except APIError:
+            pass
+
+        try:
+            message = await self.mission_completion(
+                messages=[{"role": "user", "content": "Call the conformance_complete tool now."}],
+                tools=[
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "conformance_complete",
+                            "description": "Confirm tool-calling is supported.",
+                            "parameters": {"type": "object", "properties": {}},
+                        },
+                    }
+                ],
+            )
+            checks["tool_calls"] = bool(message.get("tool_calls"))
+        except APIError:
+            pass
+
+        return checks
+
     async def close(self) -> None:
         await self._client.aclose()
-
-
-def validate_realtime_events(events: Iterable[dict[str, Any]]) -> dict[str, bool]:
-    observed = {
-        event.get("type")
-        for event in events
-        if isinstance(event, dict) and isinstance(event.get("type"), str)
-    }
-    return {
-        "data_channel_events": "session.created" in observed,
-        "server_instructions": "session.updated" in observed,
-        "vad": {
-            "input_audio_buffer.speech_started",
-            "input_audio_buffer.speech_stopped",
-        }.issubset(observed),
-        "audio_output": "response.output_audio.delta" in observed,
-        "tool_calls": "response.function_call_arguments.done" in observed,
-    }

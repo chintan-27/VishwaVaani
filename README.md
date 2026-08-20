@@ -36,13 +36,18 @@ To enable live AI missions, fill these values in `apps/api/.env` and restart Fas
 ```dotenv
 AI_BASE_URL=https://your-provider.example
 AI_API_KEY=your-key
-AI_REALTIME_MODEL=your-realtime-model
+AI_MISSION_MODEL=your-tool-calling-chat-model
 AI_EVALUATOR_MODEL=your-chat-model
+AI_TRANSCRIPTION_MODEL=your-speech-to-text-model
+AI_TTS_MODEL=your-text-to-speech-model
 ```
 
-The browser sends microphone audio directly over the provider's WebRTC connection. FastAPI only
-proxies the SDP offer so the provider key never enters frontend code. The same API process saves
-transcripts and runs structured evaluation after completion. Raw audio is never stored.
+Live missions are turn-based, not a persistent connection: the browser records one clip per
+utterance (push-to-talk, or automatic in Real-World mode) and posts it to FastAPI, which
+transcribes it, drives the mission conversation through a tool-calling chat completion, and speaks
+the reply back — so the provider key never enters frontend code. The same API process saves
+transcripts and runs structured evaluation after completion. Raw audio is never stored, only the
+transcript FastAPI produced from it.
 
 ## Production
 
